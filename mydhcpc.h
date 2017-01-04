@@ -53,6 +53,8 @@ void init(struct dhcphead *hpr)
 	return;
 }
 
+
+
 void report_error_and_exit(int errno, const char *msg)
 {
 	fprintf(stderr, "Runtime Error: %s\n", msg);
