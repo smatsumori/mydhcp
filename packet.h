@@ -19,6 +19,9 @@
 #define DCHP_NACK 6
 #define DHCP_RELEASE 7
 
+#define CODE_OK 0
+#define CODE_ERR 1
+
 struct dhcp_packet {
 	/** IP HEADER **/
 	struct in_addr ciaddr;	/* client IP address */
