@@ -21,6 +21,9 @@
 
 #define CODE_OK 0
 #define CODE_ERR 1
+#define CODE_REQALLOC 2
+#define CODE_REQEXTEND 3
+#define CODE_ACKERR 4
 
 struct dhcp_packet {
 	/** IP HEADER **/
@@ -34,6 +37,10 @@ struct dhcp_packet {
 	/** DHCP MSG **/
 	u_int8_t op;		/* packet type */
 	u_int8_t code;
+	u_int16_t ttl;		/* time to live */
+
+	struct in_addr ipaddr;
+	struct in_addr netmask;
 
 };
 

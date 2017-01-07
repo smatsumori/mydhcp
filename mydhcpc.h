@@ -9,18 +9,26 @@
 /* Defines */
 #define MAX_NAME 20
 #define MAX_DESCRIPTION 100
+#define MSG_TIMEOUT 10
 #define DHCP_SERV_IPADDR "131.113.108.53"
 #define ERR_PROCESSING 10
 #define ERR_SENDTO 11
 #define ERR_SELECT 12
 #define ERR_RECVFROM 13
 
+#define ERR_INVALID_OP 112
+#define ERR_INVALID_CODE 113
 /* dhcphead used for passing socket descriptor for the machine
  * and socket for dhcp server
  */
 struct dhcphead{
 	int mysocd; // socket descriptor
 	struct sockaddr_in *socaddptr;		/* socket for server */
+
+	/* packet info */
+	u_int16_t servttl;		/* upper time to live */
+	struct in_addr ipaddr;
+	struct in_addr netmask;
 };
 
 
@@ -100,6 +108,63 @@ void resend_discover(struct dhcphead *hpr)
 
 void send_request(struct dhcphead *hpr)
 {
+	fprintf(stderr, "Send REQUEST\n");
+	struct dhcp_packet dpacket = {
+		.op = DHCP_REQUEST, .code = CODE_REQALLOC, .siaddr = hpr->socaddptr->sin_addr,
+		.siport = hpr->socaddptr->sin_port, .ciport = DHCP_CLI_PORT,
+		.ttl = hpr->servttl, .ipaddr = hpr->ipaddr, .netmask = hpr->netmask
+	};
+
+	fprintf(stderr, "Seinding REQUEST to: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
+	fprintf(stderr, "Requesting IP: %s\n", inet_ntoa(hpr->ipaddr));
+
+	int dsize;
+	if ((dsize = sendto(hpr->mysocd, &dpacket, sizeof dpacket, 0,
+					(struct sockaddr *)(hpr->socaddptr), sizeof *(hpr->socaddptr))) < 0) {
+		report_error_and_exit(ERR_SENDTO, "sendto");
+	}
+	fprintf(stderr, "SENT: REQUEST\n");
+	fprintf(stderr, "SIZE: %d\n", dsize);
+
+	return;
+}
+
+void resend_request(struct dhcphead *hpr)
+{
+	fprintf(stderr, "Resend REQUEST in 5secs.\n");
+	sleep(5);
+	send_request(hpr);
+	return;
+}
+
+void send_extend(struct dhcphead *hpr)
+{
+	fprintf(stderr, "Send REQUEST(Extend)\n");
+	struct dhcp_packet dpacket = {
+		.op = DHCP_REQUEST, .code = CODE_REQEXTEND, .siaddr = hpr->socaddptr->sin_addr,
+		.siport = hpr->socaddptr->sin_port, .ciport = DHCP_CLI_PORT,
+		.ttl = hpr->servttl, .ipaddr = hpr->ipaddr, .netmask = hpr->netmask
+	};
+
+	fprintf(stderr, "Seinding REQUEST(Extend) to: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
+	fprintf(stderr, "Requesting IP: %s\n", inet_ntoa(hpr->ipaddr));
+
+	int dsize;
+	if ((dsize = sendto(hpr->mysocd, &dpacket, sizeof dpacket, 0,
+					(struct sockaddr *)(hpr->socaddptr), sizeof *(hpr->socaddptr))) < 0) {
+		report_error_and_exit(ERR_SENDTO, "sendto");
+	}
+	fprintf(stderr, "SENT: REQUEST(Extend)\n");
+	fprintf(stderr, "SIZE: %d\n", dsize);
+
+	return;
+}
+
+void show_ip(struct dhcphead *hpr)
+{
+	fprintf(stderr, "Address in use\n");
+	fprintf(stderr, "IPADDR: %s\n", inet_ntoa(hpr->ipaddr));
+	fprintf(stderr, "Time to live: %d\n", hpr->servttl);
 	return;
 }
 
@@ -113,10 +178,10 @@ int recvoffer(struct dhcphead *hpr)
 	 */
 	/* ports already set */
 	int rv, count;
-	socklen_t sktlen;		// size of servers socket length
+	socklen_t sktlen;		// size of server's socket length
 	struct dhcp_packet recvpacket;
 	struct timeval timeout = {		// set timeout for DHCPDISCOVER to 5 secs
-	.tv_sec = 5,
+	.tv_sec = MSG_TIMEOUT,
 	};
 	// no need to bind socket (because we have no IP)
 	fd_set rdfds;		/* sets of file descriptor */
@@ -126,7 +191,7 @@ int recvoffer(struct dhcphead *hpr)
 	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
 		report_error_and_exit(ERR_SELECT, "recvoffer");
 	} else if (rv == 0) {
-		fprintf(stderr, "Time out. No data after 5 secs.\n");
+		fprintf(stderr, "Time out. No data after %d secs.\n", MSG_TIMEOUT);
 		return -1;
 	} else {		// data recieved
 		if (FD_ISSET(hpr->mysocd, &rdfds)) {
@@ -134,11 +199,81 @@ int recvoffer(struct dhcphead *hpr)
 			if ((count = recvfrom(hpr->mysocd, &recvpacket, sizeof recvpacket, 0,
 							(struct sockaddr *)hpr->socaddptr, &sktlen))) {
 				report_error_and_exit(ERR_RECVFROM, "recvoffer");
+				
+				if (recvpacket.op == DHCP_OFFER) {
+					switch (recvpacket.code) {
+						case CODE_OK:
+							hpr->servttl = recvpacket.ttl;
+							hpr->ipaddr = recvpacket.ipaddr;
+							hpr->netmask = recvpacket.netmask;
+							return 0;
+						case CODE_ERR:
+							return 1;
+						default:
+							report_error_and_exit(ERR_INVALID_CODE, "recvoffer");
+					}
+				} else {
+					report_error_and_exit(ERR_INVALID_OP, "recvoffer");
+				}
+
 			}
 		}
 	}
 	return -2;
 }
 
+int recvack(struct dhcphead *hpr)
+{
+	/* returns
+	 * -1: timeout
+	 *  0: recv ack
+	 *  1: recv ack (error)
+	 */
+	int rv, count;
+	socklen_t sktlen;		// size of server's socket length
+	struct dhcp_packet recvpacket;
+	struct timeval timeout = {		// set timeout for DHCPACK to 5 sec
+		.tv_sec = MSG_TIMEOUT,
+	};
+
+	// no need to bind socket (because we have no IP)
+	fd_set rdfds;		/* sets of file descriptor */
+	FD_ZERO(&rdfds);		/* set fds to 0 */
+	FD_SET(hpr->mysocd, &rdfds);		/* set file descriptor */
+
+	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
+		report_error_and_exit(ERR_SELECT, "recvoffer");
+	} else if (rv == 0) {
+		fprintf(stderr, "Time out. No data after %d secs.\n", MSG_TIMEOUT);
+		return -1;
+	} else {		// data recieved
+		if (FD_ISSET(hpr->mysocd, &rdfds)) {
+			sktlen = sizeof *(hpr->socaddptr);
+			if ((count = recvfrom(hpr->mysocd, &recvpacket, sizeof recvpacket, 0,
+							(struct sockaddr *)hpr->socaddptr, &sktlen))) {
+				report_error_and_exit(ERR_RECVFROM, "recvoffer");
+				
+				if (recvpacket.op == DHCP_OFFER) {
+					switch (recvpacket.code) {
+						case CODE_OK:
+							hpr->servttl = recvpacket.ttl;
+							hpr->ipaddr = recvpacket.ipaddr;
+							hpr->netmask = recvpacket.netmask;
+							return 0;
+						case CODE_ACKERR:
+							return 1;
+						default:
+							report_error_and_exit(ERR_INVALID_CODE, "recvack");
+					}
+				} else {
+					report_error_and_exit(ERR_INVALID_OP, "recvack");
+				}
+
+			}
+		}
+	}
+
+	return -2;
+}
 
 #endif	/* __MYDHCPC__ */

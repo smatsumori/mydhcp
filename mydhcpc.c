@@ -4,6 +4,9 @@
 #define EV_TIMEOUT 13
 #define EV_RECVOFFER_C0 14
 #define EV_RECVOFFER_C1 15
+#define EV_RECVACK_C0 16
+#define EV_RECVACK_C4 17
+#define EV_TIMER_TICK_HALF 18
 
 #define ST_INIT 1
 #define ST_SEND_DISCOVER 2
@@ -22,6 +25,9 @@ static struct eventtable etab[] = {
 	{EV_TIMEOUT, "EV_TIMEOUT", "Timeout."},
 	{EV_RECVOFFER_C0, "EV_RECVOFFER_C0", "Offer Code=0 recieved."},
 	{EV_RECVOFFER_C1, "EV_RECVOFFER_C1", "No IP address available this time."},
+	{EV_RECVACK_C0, "EV_RECVACK_C0", "IP addres has allocated."},
+	{EV_RECVACK_C4, "EV_RECVACK_C4", "Error with REQUEST."},
+	{0, "", ""}
 };
 
 static struct proctable ptab[]= {
@@ -29,7 +35,10 @@ static struct proctable ptab[]= {
 	{ST_SEND_DISCOVER, EV_SEND_DISCOVER, send_discover, ST_WAIT_OFFER},
 	{ST_WAIT_OFFER, EV_TIMEOUT, send_discover, ST_WAIT_OFFER},		/* DISCOVER TIMEOUT */
 	{ST_WAIT_OFFER, EV_RECVOFFER_C0, send_request, ST_WAIT_ACK},
-	{ST_WAIT_OFFER, EV_RECVOFFER_C1, send_request, ST_WAIT_OFFER},
+	{ST_WAIT_OFFER, EV_RECVOFFER_C1, resend_discover, ST_WAIT_OFFER},
+	{ST_WAIT_ACK, EV_RECVACK_C0, show_ip, ST_IN_USE},
+	{ST_WAIT_ACK, EV_RECVACK_C4, resend_request, ST_WAIT_ACK},
+	{ST_IN_USE, EV_TIMER_TICK_HALF, send_extend, ST_WAIT_ACK},
 	{0, 0, NULL}	/* Sentinel */
 };
 
@@ -90,11 +99,21 @@ int wait_event(struct dhcphead *hpr)
 				case -1:		// timeout
 					return EV_TIMEOUT;
 				case 0:		// recvoffer(code 0)
+					fprintf(stderr, "Time to live: %d\n", hpr->servttl);
 					return EV_RECVOFFER_C0;
 				case 1:		// recv offer(code 1)	failed
 					return EV_RECVOFFER_C1;
 			}
-			break;
+
+		case ST_WAIT_ACK:
+			switch (recvack(hpr)) {
+				case -1:		// timeout
+					return EV_TIMEOUT;
+				case 0:
+					return EV_RECVACK_C0;
+				case 1:
+					return EV_RECVACK_C4;
+			}
 	}
 	return 0;
 }
