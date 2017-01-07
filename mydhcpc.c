@@ -20,7 +20,7 @@ static struct eventtable etab[] = {
 	{EV_INIT, "EV_INIT", ""},
 	{EV_SEND_DISCOVER, "EV_SEND_DISCOVER","DHCPDISCOVER has sent."},
 	{EV_TIMEOUT, "EV_TIMEOUT", "Timeout."},
-	{EV_RECVOFFER_C0, "EV_RECVOFFER_C0", "Offer recieved."},
+	{EV_RECVOFFER_C0, "EV_RECVOFFER_C0", "Offer Code=0 recieved."},
 	{EV_RECVOFFER_C1, "EV_RECVOFFER_C1", "No IP address available this time."},
 };
 
@@ -42,7 +42,7 @@ void print_event(int id)
 	struct eventtable *evptr;
 	for (evptr = etab; evptr->id != 0; evptr++) {
 		if (evptr->id == id) {
-			fprintf(stderr, "Event:%2d :: %2s :: %s\n",
+			fprintf(stderr, "##Event:%2d :: %2s :: %s##\n",
 				 	evptr->id, evptr->name, evptr->description);
 			return;
 		}
