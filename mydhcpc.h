@@ -50,7 +50,7 @@ void init(struct dhcphead *hpr)
 	struct in_addr ipaddr;	// ipaddr for dhcp serv
 	socd = socket(PF_INET, SOCK_DGRAM, 0);		// get socket descriptor
 
-	/* server */
+	/* set server socket */
 	assert(inet_aton(DHCP_SERV_IPADDR, &ipaddr) == 1);	// set dhcp serv ip
 	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
 	skt.sin_family = AF_INET;		// set address family
@@ -123,7 +123,6 @@ int recvoffer(struct dhcphead *hpr)
 			}
 		}
 	}
-	return;
 }
 
 
