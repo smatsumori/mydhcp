@@ -6,7 +6,7 @@ OBJS = mydhcpc.o
 
 LDFLAGS =
 CFLAGS = -g -O
-DFLAGS = -std=c99 -g
+DFLAGS = -g
 
 RM = rm -f
 
