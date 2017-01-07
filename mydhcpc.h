@@ -3,6 +3,7 @@
 /* Header File */
 #include "./packet.h"
 #include <assert.h>
+#include <sys/select.h>
 
 /* Defines */
 #define DHCP_SERV_IPADDR "192.168.1.101"
@@ -28,7 +29,7 @@ struct proctable {
 void init(struct dhcphead *hpr)
 {
 	// Get IP from stdin
-	assert(hpr->socd = -1);	/* Haven't initialized yet */
+	assert(hpr->socd == -1);	/* Haven't initialized yet */
 	fprintf(stderr, "Initialization\n");
 	
 	/* Begin initialization */
@@ -51,6 +52,7 @@ void init(struct dhcphead *hpr)
 	return;
 }
 
+/* Q02 */
 void send_discover(struct dhcphead *hpr)
 {
 	fprintf(stderr, "Send Discover\n");
@@ -70,5 +72,19 @@ void send_discover(struct dhcphead *hpr)
 	
 	return;
 }
+
+/*** event functions ***/
+void recvoffer(struct dhcphead *hpr)
+{
+	struct timeval timeout = {
+	.tv_sec = 5,
+	};
+	// no need to bind socket
+	fd_set rdfds;		/* sets of file descriptor */
+	FD_ZERO(&rdfds);		/* set fds 0 */
+	FD_SET(hpr->socd, &rdfds);		/* set file descriptor */
+	return;
+}
+
 
 #endif	/* __MYDHCPC__ */
