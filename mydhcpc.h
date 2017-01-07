@@ -9,7 +9,9 @@
 #define ERR_PROCESSING 10
 #define ERR_SENDTO 11
 
-
+/* dhcphead used for passing socket descriptor for the machine
+ * and socket for dhcp server
+ */
 struct dhcphead{
 	int socd;	// socket descriptor
 	struct sockaddr_in *socaddptr;		/* socket for server */
@@ -22,7 +24,7 @@ struct proctable {
 	void (*func)(struct dhcphead *hpr);
 };
 
-/* Q00 */
+/* Q01 */
 void init(struct dhcphead *hpr)
 {
 	// Get IP from stdin
