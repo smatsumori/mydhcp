@@ -8,8 +8,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define DHCP_SERV_PORT 67
-#define DHCP_CLI_PORT 68
+#define DHCP_SERV_PORT 51267
+#define DHCP_CLI_PORT 51268
 
 #define DHCP_DISCOVER 1
 #define DHCP_OFFER 2
