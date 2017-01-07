@@ -55,6 +55,7 @@ void init(struct dhcphead *hpr)
 	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
 	/* set server socket */
 	assert(inet_aton(DHCP_SERV_IPADDR, &ipaddr) == 1);	// set dhcp serv ip
+	ipaddr.s_addr = htonl(ipaddr.s_addr);		// converting to network byte order
 	skt.sin_family = AF_INET;		// set address family
 	skt.sin_port = htons(DHCP_SERV_PORT);		// port num
 	skt.sin_addr.s_addr = htonl(ipaddr.s_addr);		// set ipaddr
