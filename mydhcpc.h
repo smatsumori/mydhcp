@@ -47,15 +47,15 @@ void init(struct dhcphead *hpr)
 	
 	/* Begin initialization */
 	int socd;
-	struct sockaddr_in skt;		// soc for serv
+	static struct sockaddr_in skt;		// soc for serv
 	struct in_addr ipaddr;	// ipaddr for dhcp serv
 	socd = socket(PF_INET, SOCK_DGRAM, 0);		// get socket descriptor
 
 	fprintf(stderr, "Socket descriptor: %d\n", socd);
 
+	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
 	/* set server socket */
 	assert(inet_aton(DHCP_SERV_IPADDR, &ipaddr) == 1);	// set dhcp serv ip
-	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
 	skt.sin_family = AF_INET;		// set address family
 	skt.sin_port = htons(DHCP_SERV_PORT);		// port num
 	skt.sin_addr.s_addr = htonl(ipaddr.s_addr);		// set ipaddr
@@ -77,8 +77,7 @@ void send_discover(struct dhcphead *hpr)
 		.siport = hpr->socaddptr->sin_port, .ciport = DHCP_CLI_PORT
 	};
 	
-	fprintf(stderr, "Seinding DISCOVER to: %d\n", hpr->mysocd);
-
+	fprintf(stderr, "Seinding DISCOVER to: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
 	int dsize;		/* rval is data size sent */
 	if ((dsize = sendto(hpr->mysocd, &dpacket, sizeof dpacket, 0,
 					(struct sockaddr *)(hpr->socaddptr), sizeof *(hpr->socaddptr))) < 0) {
@@ -98,9 +97,10 @@ void resend_discover(struct dhcphead *hpr)
 	return;
 }
 
-void close(struct dhcphead *hpr)
+
+void send_request(struct dhcphead *hpr)
 {
-	
+	return;
 }
 
 /*** event functions ***/

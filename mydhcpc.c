@@ -8,6 +8,9 @@
 #define ST_INIT 1
 #define ST_SEND_DISCOVER 2
 #define ST_WAIT_OFFER 3
+#define ST_WAIT_ACK 4
+#define ST_IN_USE 5
+#define ST_EXIT 6
 
 
 int wait_event(struct dhcphead *);
@@ -25,6 +28,8 @@ static struct proctable ptab[]= {
 	{ST_INIT, EV_INIT, init, ST_SEND_DISCOVER},
 	{ST_SEND_DISCOVER, EV_SEND_DISCOVER, send_discover, ST_WAIT_OFFER},
 	{ST_WAIT_OFFER, EV_TIMEOUT, send_discover, ST_WAIT_OFFER},		/* DISCOVER TIMEOUT */
+	{ST_WAIT_OFFER, EV_RECVOFFER_C0, send_request, ST_WAIT_ACK},
+	{ST_WAIT_OFFER, EV_RECVOFFER_C1, send_request, ST_WAIT_OFFER},
 	{0, 0, NULL}	/* Sentinel */
 };
 
@@ -60,6 +65,7 @@ int main(int argc, char const* argv[])
 					status = ptptr->nextstatus;
 					fprintf(stderr, "moving to status: %2d\n", status);
 					fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
+					fprintf(stderr, "Seinding DISCOVER to: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
 					break;
 				}
 		}
