@@ -20,15 +20,18 @@
 #define DHCP_RELEASE 7
 
 struct dhcp_packet {
-	u_int8_t op;		/* packet type(MESSAGE) */
-
 	/** IP HEADER **/
 	struct in_addr ciaddr;	/* client IP address */
 	struct in_addr siaddr;	/* server IP address */
 
 	/** UDP HEADER **/
 	in_port_t ciport;		/* client port */
-	in_port_t	siport;		/* serv port */
+	in_port_t siport;		/* serv port */
+
+	/** DHCP MSG **/
+	u_int8_t op;		/* packet type */
+	u_int8_t code;
+
 };
 
 
