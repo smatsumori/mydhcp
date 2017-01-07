@@ -47,7 +47,7 @@ void init(struct dhcphead *hpr)
 	
 	/* Begin initialization */
 	int socd;
-	static struct sockaddr_in skt;		// soc for serv
+	static struct sockaddr_in skt;		// socket for server SHOULD BE STATIC
 	struct in_addr ipaddr;	// ipaddr for dhcp serv
 	socd = socket(PF_INET, SOCK_DGRAM, 0);		// get socket descriptor
 

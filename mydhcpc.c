@@ -65,7 +65,6 @@ int main(int argc, char const* argv[])
 					status = ptptr->nextstatus;
 					fprintf(stderr, "moving to status: %2d\n", status);
 					fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
-					fprintf(stderr, "Seinding DISCOVER to: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
 					break;
 				}
 		}
