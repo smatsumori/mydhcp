@@ -51,14 +51,9 @@ void init(struct dhcphead *hpr)
 	struct in_addr ipaddr;	// ipaddr for dhcp serv
 	socd = socket(PF_INET, SOCK_DGRAM, 0);		// get socket descriptor
 
-<<<<<<< Updated upstream
 	fprintf(stderr, "Socket descriptor: %d\n", socd);
-
 	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
 	/* set server socket */
-=======
-	/* set SERVER socket */
->>>>>>> Stashed changes
 	assert(inet_aton(DHCP_SERV_IPADDR, &ipaddr) == 1);	// set dhcp serv ip
 	skt.sin_family = AF_INET;		// set address family
 	skt.sin_port = htons(DHCP_SERV_PORT);		// port num
