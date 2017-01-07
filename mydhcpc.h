@@ -137,7 +137,7 @@ int recvoffer(struct dhcphead *hpr)
 			}
 		}
 	}
-
+	return -2;
 }
 
 
