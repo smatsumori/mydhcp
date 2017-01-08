@@ -1,7 +1,7 @@
 #ifndef __MYDHCPC__
 #define __MYDHCPC__
 /* Header File */
-#include "./packet.h"
+#include "../utils/packet.h"
 #include <assert.h>
 #include <sys/select.h>
 #include <unistd.h>
