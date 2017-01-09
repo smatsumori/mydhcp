@@ -142,11 +142,13 @@ int main(int argc, char const* argv[])
 
 	status = ST_INIT;
 
-	event = global_event_dispatcher(hpr);
 
-	fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
-	/*
-	while (1) {
+	while(1) {
+		event = global_event_dispatcher(hpr);		// get global event
+		global_client_selector(hpr);		// select client in command
+
+		/** below executing client FSM **/
+		/*
 		for (ptptr = ptab; ptptr -> status; ptptr++) {
 				if (ptptr -> status == status && ptptr -> event == event) {
 					(*ptptr -> func)(hpr);
@@ -161,8 +163,8 @@ int main(int argc, char const* argv[])
 	
 		event = wait_event(hpr);
 		print_event(event);
+		*/
 	}
-	*/
 
 	return 0;
 }
@@ -213,8 +215,8 @@ int global_client_selector(struct dhcphead *hpr)
 	struct client *cli;
 	struct client newclient;
 
-	fprintf(stderr, "Looking for client...\n");
-
+	fprintf(stderr, "Looking for client...:%s\n", inet_ntoa(hpr->socaddptr->sin_addr));
+	
 	if ((cli = find_cltab(hpr, hpr->socaddptr->sin_addr)) == NULL) {	// not found
 		fprintf(stderr, "Client NOT found: IPADDR: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
 		newclient.id_addr = hpr->socaddptr->sin_addr;		// set ID(ipaddr) for a new client

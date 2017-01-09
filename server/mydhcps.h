@@ -39,6 +39,12 @@ void global_init(struct dhcphead *hpr)
 {
 	fprintf(stderr, "Initializing Server...\n");
 
+	/** CLIENT **/
+	if((hpr->socaddptr = (struct sockaddr_in *)malloc(sizeof (struct sockaddr_in))) == NULL)
+		report_error_and_exit(ERR_MALLOC, "global_init");
+	bzero(hpr->socaddptr, sizeof *(hpr->socaddptr));		// necessary
+
+	/** SERVER **/
 	if ((hpr->mysocd = socket(PF_INET, SOCK_DGRAM, 0)) < 0)
 		report_error_and_exit(ERR_SOCKET, "global_init");
 
@@ -195,7 +201,9 @@ int recvpacket(struct dhcphead *hpr)
 							(struct sockaddr *)hpr->socaddptr, &sktlen)) < 0) {		// recv message
 				report_error_and_exit(ERR_RECVFROM, "recvmsg");
 			}
-			printf("DATA RECIVED. LENGTH: %d\n", count);
+			printf("DATA RECIEVED\n");
+			// TODO: FIX FAITAL BUG
+			printf("FROM: %s LENGTH: %d \n", inet_ntoa(hpr->socaddptr->sin_addr), count);
 			return 0;
 		}
 	}
