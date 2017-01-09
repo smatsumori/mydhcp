@@ -3,6 +3,8 @@
 
 
 /*** FSM ***/
+#define GLOBAL_EV_RECVMSG 100
+#define GLOBAL_EV_TIMEOUT 101
 #define EV_INIT 1
 #define EV_SEND_DISCOVER 2
 #define EV_TIMEOUT 13
@@ -19,6 +21,8 @@
 
 /*** PROTOTYPES ***/
 int wait_event(struct dhcphead *);
+int global_event_dispatcher(struct dhcphead *);
+int global_client_selector(struct dhcphead *);
 
 static int status;
 static struct client clist_head = {
@@ -31,7 +35,7 @@ static struct ippool iplist_head = {
 
 static struct dhcphead dhcph = {
 	.client_id = 0, .clisthpr = &clist_head, .iplisthpr = &iplist_head,
-	.ipsets = 0
+	.ipsets = 0, .clients_online = 0
 };
 
 static struct eventtable etab[] = {
@@ -68,6 +72,7 @@ void get_config(const char *configfile, struct dhcphead *hpr)
 		report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
 	fprintf(stderr, "Time to live (Global) set to:%4d\n", hpr->iplisthpr->ttl);
+	fprintf(stderr, "Setting IPs\n");
 
 	while (fgets(cfgstr, MAX_CONFIG, fp) != NULL) {
 		/* set ip to iptable */
@@ -137,6 +142,7 @@ int main(int argc, char const* argv[])
 
 	status = ST_INIT;
 
+	event = global_event_dispatcher(hpr);
 
 	fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
 	/*
@@ -163,8 +169,17 @@ int main(int argc, char const* argv[])
 
 int global_event_dispatcher(struct dhcphead *hpr) 
 {
-	
-	return 0;
+	/* distinguishes who to throw an event */
+	// TODO: also need to handle msg timout for each client(how?)
+	switch (recvpacket(hpr)) {
+		case -1:
+			return GLOBAL_EV_TIMEOUT;
+
+		case 0:		// message recieved
+			return GLOBAL_EV_RECVMSG;
+
+	}
+	return 0;		// error
 }
 
 int wait_event(struct dhcphead *hpr)
@@ -187,5 +202,26 @@ int wait_event(struct dhcphead *hpr)
 			break;
 	}
 	*/
+	return 0;
+}
+
+int global_client_selector(struct dhcphead *hpr)
+{
+	/* select client by IP */
+	/* if client doesn't exist then create a new one */
+	struct dhcp_packet packet = hpr->recvpacket;
+	struct client *cli;
+	struct client newclient;
+
+	fprintf(stderr, "Looking for client...\n");
+
+	if ((cli = find_cltab(hpr, hpr->socaddptr->sin_addr)) == NULL) {	// not found
+		fprintf(stderr, "Client NOT found: IPADDR: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
+		newclient.id_addr = hpr->socaddptr->sin_addr;		// set ID(ipaddr) for a new client
+		hpr->cliincmd = set_cltab(hpr, hpr->clisthpr, &newclient);		// set new client to table
+	} else {		// found
+		fprintf(stderr, "Client found: ID:%2d IPADDR: %s\n", cli->id, inet_ntoa(cli->id_addr));
+		hpr->cliincmd = cli;
+	}
 	return 0;
 }

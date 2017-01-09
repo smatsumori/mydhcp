@@ -19,12 +19,17 @@ struct eventtable;
 struct proctable;
 
 void set_iptab(struct dhcphead *, struct ippool *, struct ippool *);
+struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct client *cpr);
 
 /*** DHCPHEAD ***/
 struct dhcphead{
 	int ipsets;
+	int clients_online;
 	int client_id;
 	int mysocd;
+	struct dhcp_packet recvpacket;
+	struct sockaddr_in *socaddptr;
+	struct client *cliincmd;		// client now in command
 	struct client *clisthpr;		// client list head pointer
 	struct ippool *iplisthpr;		// server list head pointer
 };
@@ -42,11 +47,16 @@ void global_init(struct dhcphead *hpr)
 	myskt.sin_family = AF_INET;
 	myskt.sin_port = htons(DHCP_SERV_PORT);
 	assert(inet_aton(DHCP_SERV_IPADDR, &myskt.sin_addr) == 1);
-	fprintf(stderr, "DHCP server's IP: %s:%d\n", 
-			inet_ntoa(myskt.sin_addr), DHCP_SERV_PORT);
 
 	if (bind(hpr->mysocd, (struct sockaddr *)&myskt, sizeof myskt) < 0)
 		report_error_and_exit(ERR_BIND, "global_init");
+
+	fprintf(stderr, "bind cmpl...\n");
+
+	fprintf(stderr, "DHCP server's IP: %s:%d\n", 
+			inet_ntoa(myskt.sin_addr), DHCP_SERV_PORT);
+
+	fprintf(stderr, "Initialization complete!\n");
 
 	return;
 }
@@ -82,6 +92,35 @@ struct ippool {
 
 
 /*** ACCESSOR ***/
+struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct client *cpr)
+{
+	// TODO: remove clhpr (don't need this)
+	/* malloc for cpr */
+	struct client *cpr_m;
+	if ((cpr_m = (struct client *)malloc(sizeof(struct client))) == NULL) 
+		report_error_and_exit(ERR_MALLOC, "set_cltab");
+
+	*cpr_m = *cpr;		// copy instance 
+
+	cpr_m->id = ++(hpr->clients_online);
+
+	cpr_m->fp = clhpr;
+	cpr_m->bp = clhpr->bp;
+	clhpr->bp->fp = cpr_m;
+	clhpr->bp = cpr_m;
+
+	printf("[NEW CLIENT] ID:%2d  ", cpr_m->id);
+	printf("IPADDR(ID): %s  ", inet_ntoa(cpr_m->addr));
+	return cpr_m;
+}
+
+struct client *find_cltab(struct dhcphead *hpr, struct in_addr id_addr)
+{
+	/* find designated client with in_addr */
+	return NULL;
+}
+
+
 void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 {
 	/* malloc for ipr */
@@ -125,6 +164,42 @@ void print_all_iptab(struct ippool *iphpr)
 void free_iptab(struct ippool *iphpr)
 {
 	return;
+}
+
+/*** GLOBAL ***/
+int recvpacket(struct dhcphead *hpr)
+{
+	/* set dhcp packet */
+
+	int rv, count;
+	socklen_t sktlen; // size of client's socket
+	struct timeval timeout = {
+		.tv_sec = MSG_TIMEOUT,
+	};
+
+	// socket already binded
+	
+	fd_set rdfds;		// sets of socket descriptor
+	FD_ZERO(&rdfds);
+	FD_SET(hpr->mysocd, &rdfds);		// set file descriptor
+
+	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
+		report_error_and_exit(ERR_SELECT, "recvmsg");
+	} else if (rv == 0) {		// timeout
+		fprintf(stderr, "Time out. No data after %d secs.\n", MSG_TIMEOUT);
+		return -1;
+	} else {	// data recieved
+		if (FD_ISSET(hpr->mysocd, &rdfds)) {
+			sktlen = sizeof *(hpr->socaddptr);
+			if ((count = recvfrom(hpr->mysocd, &hpr->recvpacket, sizeof hpr->recvpacket, 0,
+							(struct sockaddr *)hpr->socaddptr, &sktlen)) < 0) {		// recv message
+				report_error_and_exit(ERR_RECVFROM, "recvmsg");
+			}
+			printf("DATA RECIVED. LENGTH: %d\n", count);
+			return 0;
+		}
+	}
+
 }
 
 /*** FSM ACTION ***/

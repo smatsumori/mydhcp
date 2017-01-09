@@ -10,11 +10,12 @@
 struct client {
 	struct client *fp;	/* linked list */
 	struct client *bp;
+	int id;
 	short status;
 	int ttlcounter;		/* remaining time */
 
 	/*** below: network byte order ***/
-	struct in_addr id;		/* client IP */
+	struct in_addr id_addr;		/* client IP */
 	struct in_addr addr;		/* client IP (allocated) */
 	struct in_addr netmask;		/* netmask (allocated) */
 	uint16_t ttl;		/* time to live */
