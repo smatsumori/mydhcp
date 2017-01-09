@@ -1,8 +1,8 @@
 CC = gcc
-TARGET = mydhcpc.out
-SRCS = mydhcpc.c
-OBJS = mydhcpc.o
-DEPS = mydhcpc.h packet.h
+TARGET = mydhcps.out
+SRCS = mydhcps.c
+OBJS = mydhcps.o
+DEPS = mydhcps.h packet.h
 
 LDFLAGS =
 CFLAGS = -g -O
