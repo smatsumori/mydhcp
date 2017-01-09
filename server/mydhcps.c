@@ -1,4 +1,5 @@
 #include "./mydhcps.h"
+#define MAX_CONFIG 1000
 #define EV_INIT 1
 #define EV_SEND_DISCOVER 2
 #define EV_TIMEOUT 13
@@ -13,8 +14,14 @@
 #define ST_EXIT 6
 
 
+/*** PROTOTYPES ***/
 int wait_event(struct dhcphead *);
+
 static int status;
+static struct client clist_head;
+static struct ippool iplist_head = {
+	.id = 0, fp = &iplist_head, bp = &iplist_head
+};
 
 static struct eventtable etab[] = {
 	{EV_INIT, "EV_INIT", ""},
@@ -36,6 +43,16 @@ static struct proctable ptab[]= {
 static struct dhcphead dhcph = {
 	.mysocd = -1
 };
+
+void get_config(const char *configfile)
+{
+	char *cfgstr[MAX_CONFIG];
+	FILE *fp;
+  fp = fopen(configfile, "r");		// open file in read mode
+	
+
+	return;
+}
 
 void print_event(int id)
 {
