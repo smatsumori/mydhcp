@@ -2,25 +2,15 @@
 #define __MYDHCPC__
 /* Header File */
 #include "../utils/packet.h"
+#include "../utils/utils.h"
+
 #include <assert.h>
 #include <sys/select.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <signal.h>
 
-/* Defines */
-#define MAX_NAME 20
-#define MAX_DESCRIPTION 100
-#define MSG_TIMEOUT 10
-#define DHCP_SERV_IPADDR "131.113.108.53"
-#define ERR_PROCESSING 10
-#define ERR_SENDTO 11
-#define ERR_SELECT 12
-#define ERR_RECVFROM 13
-#define ERROR_EVENT 14
 
-#define ERR_INVALID_OP 112
-#define ERR_INVALID_CODE 113
 /* dhcphead used for passing socket descriptor for the machine
  * and socket for dhcp server
  */
@@ -34,7 +24,7 @@ struct dhcphead{
 	struct in_addr netmask;
 };
 
-
+/*** FSM ***/
 struct eventtable {
 	int id;
 	char name[MAX_NAME];
