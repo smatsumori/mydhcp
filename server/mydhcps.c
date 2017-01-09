@@ -79,7 +79,7 @@ void get_config(const char *configfile, struct dhcphead *hpr)
 		if (inet_aton(addr, &iplist_tmp.addr) == 0)		// set ipaddr
 			report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
-		iplist_tmp.addr.s_addr = htonl(iplist_tmp.addr.s_addr);		// convert to network order
+//		iplist_tmp.addr.s_addr = htonl(iplist_tmp.addr.s_addr);		// convert to network order
 
 		if ((ptr = strtok(NULL, delim)) == NULL)		// ptr = second token(netmask)
 			report_error_and_exit(ERR_READ_CONFIG, "get_config");
@@ -89,7 +89,7 @@ void get_config(const char *configfile, struct dhcphead *hpr)
 		if (inet_aton(netmask, &iplist_tmp.netmask) == 0)		// set netmask
 			report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
-		iplist_tmp.netmask.s_addr = htonl(iplist_tmp.netmask.s_addr);		// convert to network order
+//		iplist_tmp.netmask.s_addr = htonl(iplist_tmp.netmask.s_addr);		// convert to network order
 
 		set_iptab(hpr, hpr->iplisthpr, &iplist_tmp);
 	}
@@ -131,12 +131,15 @@ int main(int argc, char const* argv[])
 	get_config("config-file", hpr);
 	#endif
 
-	print_all_iptab(hpr->iplisthpr);
+	global_init(hpr);
 
-	/*
 	int event = EV_INIT;
+
 	status = ST_INIT;
+
+
 	fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
+	/*
 	while (1) {
 		for (ptptr = ptab; ptptr -> status; ptptr++) {
 				if (ptptr -> status == status && ptptr -> event == event) {
@@ -155,6 +158,12 @@ int main(int argc, char const* argv[])
 	}
 	*/
 
+	return 0;
+}
+
+int global_event_dispatcher(struct dhcphead *hpr) 
+{
+	
 	return 0;
 }
 

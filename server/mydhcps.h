@@ -5,6 +5,12 @@
 #include "../utils/utils.h"
 #include "./client.h"
 #include <string.h>
+#include <assert.h>
+
+/*** ERROR ***/
+// TODO: move to utils
+#define ERR_SOCKET 113
+#define ERR_BIND 114
 
 /*** PROTOTYPES ***/
 struct dhcphead;
@@ -24,6 +30,26 @@ struct dhcphead{
 };
 
 /*** FUNCTIONS ***/
+void global_init(struct dhcphead *hpr)
+{
+	fprintf(stderr, "Initializing Server...\n");
+
+	if ((hpr->mysocd = socket(PF_INET, SOCK_DGRAM, 0)) < 0)
+		report_error_and_exit(ERR_SOCKET, "global_init");
+
+	struct sockaddr_in myskt;
+	bzero(&myskt, sizeof myskt);
+	myskt.sin_family = AF_INET;
+	myskt.sin_port = htons(DHCP_SERV_PORT);
+	assert(inet_aton(DHCP_SERV_IPADDR, &myskt.sin_addr) == 1);
+	fprintf(stderr, "DHCP server's IP: %s:%d\n", 
+			inet_ntoa(myskt.sin_addr), DHCP_SERV_PORT);
+
+	if (bind(hpr->mysocd, (struct sockaddr *)&myskt, sizeof myskt) < 0)
+		report_error_and_exit(ERR_BIND, "global_init");
+
+	return;
+}
 
 
 /*** FSM ***/
@@ -64,7 +90,7 @@ void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 		report_error_and_exit(ERR_MALLOC, "set_iptab");
 
 	*ipr_m = *ipr;		// copy (not sure if this works)
-	ipr_m->id = ++(hpr->ipsets);
+	ipr_m->id = ++(hpr->ipsets);	/* set number of ips */
 
 	printf("[SET] ID:%2d  ", ipr_m->id);
 	printf("IPADDR: %s  ", inet_ntoa(ipr_m->addr));
@@ -75,6 +101,7 @@ void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 	ipr_m->bp = iphpr->bp;
 	iphpr->bp->fp = ipr_m;
 	iphpr->bp = ipr_m;
+
 	return;
 }
 
