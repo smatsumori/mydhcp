@@ -51,7 +51,7 @@ static struct proctable ptab[]= {
 	{ST_IN_USE, EV_TIMER_TICK_HALF, send_extend, ST_WAIT_ACK},
 	{ST_IN_USE, EV_SIGHUP, send_release, ST_EXIT},
 	{ST_EXIT, EV_EPSILON, exit_client, ST_EXIT},
-	{0, 0, NULL}	/* Sentinel */
+	{0, 0, NULL, 0}	/* Sentinel */
 };
 
 static struct dhcphead dhcph = {
