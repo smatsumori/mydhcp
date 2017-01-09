@@ -20,7 +20,6 @@
 /*** PROTOTYPES ***/
 int wait_event(struct dhcphead *);
 
-
 static int status;
 static struct client clist_head = {
 	.fp = &clist_head, .bp = &clist_head
@@ -31,7 +30,8 @@ static struct ippool iplist_head = {
 };
 
 static struct dhcphead dhcph = {
-	.client_id = 0, .clisthpr = &clist_head, .iplisthpr = &iplist_head
+	.client_id = 0, .clisthpr = &clist_head, .iplisthpr = &iplist_head,
+	.ipsets = 0
 };
 
 static struct eventtable etab[] = {
@@ -52,9 +52,9 @@ static struct proctable ptab[]= {
 void get_config(const char *configfile, struct dhcphead *hpr)
 {
 	fprintf(stderr, "Reading config...\n");
-	struct ippool iplist_tmp;
+	static struct ippool iplist_tmp;
 	const char *delim = "\t";
-	char *ptr;
+	char *ptr, addr[16], netmask[16];		// TODO: remove magic no
 	char cfgstr[MAX_CONFIG];
 	FILE *fp;
 	int ip_id = 1;
@@ -67,23 +67,31 @@ void get_config(const char *configfile, struct dhcphead *hpr)
 	if ((iplist_head.ttl = atoi(cfgstr)) == 0)		// read time to live
 		report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
-	fprintf(stderr, "Time to live (Global) set to:%2d\n", hpr->iplisthpr->ttl);
+	fprintf(stderr, "Time to live (Global) set to:%4d\n", hpr->iplisthpr->ttl);
 
 	while (fgets(cfgstr, MAX_CONFIG, fp) != NULL) {
 		/* set ip to iptable */
 		if ((ptr = strtok(cfgstr, delim)) == NULL)		// ptr = first token(ipaddr)
 			report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
-		if (inet_aton(ptr, &iplist_tmp.addr) == 0)		// set ipaddr
+		strcpy(addr, ptr);
+
+		if (inet_aton(addr, &iplist_tmp.addr) == 0)		// set ipaddr
 			report_error_and_exit(ERR_READ_CONFIG, "get_config");
+
+		iplist_tmp.addr.s_addr = htonl(iplist_tmp.addr.s_addr);		// convert to network order
 
 		if ((ptr = strtok(NULL, delim)) == NULL)		// ptr = second token(netmask)
 			report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
-		if (inet_aton(ptr, &iplist_tmp.netmask) == 0)		// set netmask
+		strcpy(netmask, ptr);
+
+		if (inet_aton(netmask, &iplist_tmp.netmask) == 0)		// set netmask
 			report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
-		set_iptab(hpr->iplisthpr, &iplist_tmp);
+		iplist_tmp.netmask.s_addr = htonl(iplist_tmp.netmask.s_addr);		// convert to network order
+
+		set_iptab(hpr, hpr->iplisthpr, &iplist_tmp);
 	}
 	
 	return;
@@ -122,6 +130,8 @@ int main(int argc, char const* argv[])
 	#ifdef DEBUG
 	get_config("config-file", hpr);
 	#endif
+
+	print_all_iptab(hpr->iplisthpr);
 
 	/*
 	int event = EV_INIT;

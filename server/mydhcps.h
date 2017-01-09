@@ -12,13 +12,18 @@ struct ippool;
 struct eventtable;
 struct proctable;
 
+void set_iptab(struct dhcphead *, struct ippool *, struct ippool *);
+
 /*** DHCPHEAD ***/
 struct dhcphead{
+	int ipsets;
 	int client_id;
 	int mysocd;
 	struct client *clisthpr;		// client list head pointer
 	struct ippool *iplisthpr;		// server list head pointer
 };
+
+/*** FUNCTIONS ***/
 
 
 /*** FSM ***/
@@ -51,7 +56,7 @@ struct ippool {
 
 
 /*** ACCESSOR ***/
-void set_iptab(struct ippool *iphpr, struct ippool *ipr)
+void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 {
 	/* malloc for ipr */
 	struct ippool *ipr_m;
@@ -59,6 +64,11 @@ void set_iptab(struct ippool *iphpr, struct ippool *ipr)
 		report_error_and_exit(ERR_MALLOC, "set_iptab");
 
 	*ipr_m = *ipr;		// copy (not sure if this works)
+	ipr_m->id = ++(hpr->ipsets);
+
+	printf("[SET] ID:%2d  ", ipr_m->id);
+	printf("IPADDR: %s  ", inet_ntoa(ipr_m->addr));
+	printf("NETMASK: %s\n", inet_ntoa(ipr_m->netmask));
 
 	/* set ip to ippool */
 	ipr_m->fp = iphpr;
@@ -68,7 +78,24 @@ void set_iptab(struct ippool *iphpr, struct ippool *ipr)
 	return;
 }
 
-void get_iptab(struct ippool *hpr)
+void get_iptab(struct ippool *iphpr)
+{
+	return;
+}
+
+void print_all_iptab(struct ippool *iphpr)
+{
+	fprintf(stderr, "\n*** LIST OF IPTABLE***\n");
+	struct ippool *sp = iphpr;
+	for (sp = sp->fp; sp->id != 0; sp = sp->fp) {
+		printf("[SET] ID:%2d  ", sp->id);
+		printf("IPADDR: %s  ", inet_ntoa(sp->addr));
+		printf("NETMASK: %s\n", inet_ntoa(sp->netmask));
+	}
+	return;
+}
+
+void free_iptab(struct ippool *iphpr)
 {
 	return;
 }
