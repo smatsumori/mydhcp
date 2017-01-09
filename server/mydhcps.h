@@ -223,5 +223,22 @@ void init(struct dhcphead *hpr)
 	return;
 }
 
+void send_offer(struct dhcphead *hpr)
+{
+	// TODO: implement
+	
+	return;
+}
 
+void send_ack(struct dhcphead *hpr)
+{
+	// TODO: implement
+	return;
+}
+
+void client_exit(struct dhcphead *hpr)
+{
+	// TODO: implement
+	return;
+}
 #endif

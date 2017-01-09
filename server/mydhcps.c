@@ -5,11 +5,13 @@
 /*** FSM ***/
 #define GLOBAL_EV_RECVMSG 100
 #define GLOBAL_EV_TIMEOUT 101
-#define EV_INIT 1
-#define EV_SEND_DISCOVER 2
 #define EV_TIMEOUT 13
-#define EV_RECVOFFER_C0 14
-#define EV_RECVOFFER_C1 15
+
+#define EV_INIT 1
+#define EV_RECV_DISCOVER 200
+#define EV_RECV_REQUEST_C2 201
+#define EV_RECV_REQUEST_C3 202
+#define EV_RECV_RELEASE 203
 
 #define ST_INIT 1
 #define ST_SEND_DISCOVER 2
@@ -18,13 +20,16 @@
 #define ST_IN_USE 5
 #define ST_EXIT 6
 
+#define ST_WAIT_DISCOVER 11
+#define ST_WAIT_REQUEST 12
+#define ST_IP_RENTED 13
 
 /*** PROTOTYPES ***/
 int wait_event(struct dhcphead *);
 int global_event_dispatcher(struct dhcphead *);
 int global_client_selector(struct dhcphead *);
 
-static int status;
+static int global_status;
 static struct client clist_head = {
 	.fp = &clist_head, .bp = &clist_head
 };
@@ -40,14 +45,17 @@ static struct dhcphead dhcph = {
 
 static struct eventtable etab[] = {
 	{EV_INIT, "EV_INIT", ""},
-	{EV_SEND_DISCOVER, "EV_SEND_DISCOVER","DHCPDISCOVER has sent."},
-	{EV_TIMEOUT, "EV_TIMEOUT", "Timeout."},
-	{EV_RECVOFFER_C0, "EV_RECVOFFER_C0", "Offer Code=0 recieved."},
-	{EV_RECVOFFER_C1, "EV_RECVOFFER_C1", "No IP address available this time."},
+	{EV_RECV_DISCOVER, "EV_RECV_DISCOVER", "Recieve DISCOVER"},
+	{EV_RECV_REQUEST_C2, "EV_RECV_REQUEST_C2", "Recieve REQUEST Code = 2 (ALLOC)"},
+	{EV_RECV_REQUEST_C3, "EV_RECV_REQUEST_C3", "Recieve REQUEST Code = 3 (EXTEND)"},
+	{EV_RECV_RELEASE, "EV_RECV_RELEASE", "Recieve RELEASE"}
 };
 
-static struct proctable ptab[]= {
-	{ST_INIT, EV_INIT, init, ST_SEND_DISCOVER},
+static struct proctable ptab[]= {		// TODO: handle invalid msg
+	{ST_WAIT_DISCOVER, EV_RECV_DISCOVER, send_offer, ST_WAIT_REQUEST},
+	{ST_WAIT_REQUEST, EV_RECV_REQUEST_C2, send_ack, ST_IP_RENTED},
+	{ST_IP_RENTED, EV_RECV_REQUEST_C3, send_ack, ST_IP_RENTED},
+	{ST_IP_RENTED, EV_RECV_RELEASE, client_exit, ST_EXIT},
 	{0, 0, NULL, 0}	/* Sentinel */
 };
 
@@ -138,32 +146,32 @@ int main(int argc, char const* argv[])
 
 	global_init(hpr);
 
+	int global_event = EV_INIT;
 	int event = EV_INIT;
-
-	status = ST_INIT;
+	global_status = ST_INIT;
 
 
 	while(1) {
-		event = global_event_dispatcher(hpr);		// get global event
+		// TODO: show client status
+		global_event = global_event_dispatcher(hpr);		// get global event
 		global_client_selector(hpr);		// select client in command
 
 		/** below executing client FSM **/
-		/*
+		fprintf(stderr, "\n********Now taking care of CLIENT: %2d********\n\n", hpr->cliincmd->id);
+		fprintf(stderr, "\n--------STATUS: %2d--------\n\n", hpr->cliincmd->status);
+		event = wait_event(hpr);
+		print_event(event);
 		for (ptptr = ptab; ptptr -> status; ptptr++) {
-				if (ptptr -> status == status && ptptr -> event == event) {
+				if (ptptr -> status == hpr->cliincmd->status && ptptr -> event == event) {
 					(*ptptr -> func)(hpr);
-					status = ptptr->nextstatus;
-					fprintf(stderr, "moving to status: %2d\n", status);
-					fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
+					hpr->cliincmd->status = ptptr->nextstatus;
+					fprintf(stderr, "moving to status: %2d\n", hpr->cliincmd->status);
 					break;
 				}
 		}
 		if (ptptr -> status == 0) 
 			report_error_and_exit(ERR_PROCESSING, "Hit sentinel. Processing error in main()");
-	
-		event = wait_event(hpr);
-		print_event(event);
-		*/
+
 	}
 
 	return 0;
@@ -186,24 +194,12 @@ int global_event_dispatcher(struct dhcphead *hpr)
 
 int wait_event(struct dhcphead *hpr)
 {
-	/*
-	switch (status) {
-		case ST_SEND_DISCOVER:
-			return EV_SEND_DISCOVER;		// DISCOVER has sent
+	switch (hpr->cliincmd->status) {
+		case ST_WAIT_DISCOVER:
+			// call get_discover
+			return EV_RECV_DISCOVER;		// DISCOVER has sent
 
-		case ST_WAIT_OFFER:
-			assert(hpr->mysocd != -1);
-			switch (recvoffer(hpr)) {
-				case -1:		// timeout
-					return EV_TIMEOUT;
-				case 0:		// recvoffer(code 0)
-					return EV_RECVOFFER_C0;
-				case 1:		// recv offer(code 1)	failed
-					return EV_RECVOFFER_C1;
-			}
-			break;
 	}
-	*/
 	return 0;
 }
 
