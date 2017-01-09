@@ -1,5 +1,8 @@
 #include "./mydhcps.h"
-#define MAX_CONFIG 1000
+#define MAX_CONFIG 1024
+
+
+/*** FSM ***/
 #define EV_INIT 1
 #define EV_SEND_DISCOVER 2
 #define EV_TIMEOUT 13
@@ -17,10 +20,18 @@
 /*** PROTOTYPES ***/
 int wait_event(struct dhcphead *);
 
+
 static int status;
-static struct client clist_head;
+static struct client clist_head = {
+	.fp = &clist_head, .bp = &clist_head
+};
+
 static struct ippool iplist_head = {
-	.id = 0, fp = &iplist_head, bp = &iplist_head
+	.id = 0, .fp = &iplist_head, .bp = &iplist_head
+};
+
+static struct dhcphead dhcph = {
+	.client_id = 0, .clisthpr = &clist_head, .iplisthpr = &iplist_head
 };
 
 static struct eventtable etab[] = {
@@ -33,24 +44,48 @@ static struct eventtable etab[] = {
 
 static struct proctable ptab[]= {
 	{ST_INIT, EV_INIT, init, ST_SEND_DISCOVER},
-	{ST_SEND_DISCOVER, EV_SEND_DISCOVER, send_discover, ST_WAIT_OFFER},
-	{ST_WAIT_OFFER, EV_TIMEOUT, send_discover, ST_WAIT_OFFER},		/* DISCOVER TIMEOUT */
-	{ST_WAIT_OFFER, EV_RECVOFFER_C0, send_request, ST_WAIT_ACK},
-	{ST_WAIT_OFFER, EV_RECVOFFER_C1, send_request, ST_WAIT_OFFER},
-	{0, 0, NULL}	/* Sentinel */
+	{0, 0, NULL, 0}	/* Sentinel */
 };
 
-static struct dhcphead dhcph = {
-	.mysocd = -1
-};
+/*** FUNCTIONS ***/
 
-void get_config(const char *configfile)
+void get_config(const char *configfile, struct dhcphead *hpr)
 {
-	char *cfgstr[MAX_CONFIG];
+	fprintf(stderr, "Reading config...\n");
+	struct ippool iplist_tmp;
+	const char *delim = "\t";
+	char *ptr;
+	char cfgstr[MAX_CONFIG];
 	FILE *fp;
-  fp = fopen(configfile, "r");		// open file in read mode
-	
+	int ip_id = 1;
+	if ((fp = fopen(configfile, "r")) == NULL) 
+		report_error_and_exit(ERR_READ_CONFIG, "get_config");
 
+	if (fgets(cfgstr, MAX_CONFIG, fp) == NULL) 
+		report_error_and_exit(ERR_READ_CONFIG, "get_config");
+
+	if ((iplist_head.ttl = atoi(cfgstr)) == 0)		// read time to live
+		report_error_and_exit(ERR_READ_CONFIG, "get_config");
+
+	fprintf(stderr, "Time to live (Global) set to:%2d\n", hpr->iplisthpr->ttl);
+
+	while (fgets(cfgstr, MAX_CONFIG, fp) != NULL) {
+		/* set ip to iptable */
+		if ((ptr = strtok(cfgstr, delim)) == NULL)		// ptr = first token(ipaddr)
+			report_error_and_exit(ERR_READ_CONFIG, "get_config");
+
+		if (inet_aton(ptr, &iplist_tmp.addr) == 0)		// set ipaddr
+			report_error_and_exit(ERR_READ_CONFIG, "get_config");
+
+		if ((ptr = strtok(NULL, delim)) == NULL)		// ptr = second token(netmask)
+			report_error_and_exit(ERR_READ_CONFIG, "get_config");
+
+		if (inet_aton(ptr, &iplist_tmp.netmask) == 0)		// set netmask
+			report_error_and_exit(ERR_READ_CONFIG, "get_config");
+
+		set_iptab(hpr->iplisthpr, &iplist_tmp);
+	}
+	
 	return;
 }
 
@@ -68,11 +103,28 @@ void print_event(int id)
 	return;
 }
 
+
+/*** MAIN ***/
 int main(int argc, char const* argv[])
 {
 	struct proctable *ptptr;
-	struct dhcphead *hpr = &dhcph;
-	int event = EV_INIT;	/* Initialization */
+	struct dhcphead *hpr = &dhcph;		// must access through hpr
+
+	#ifndef DEBUG
+	if (argc != 2) {
+		fprintf(stderr, "Usage: ./mydhcps.out config-file\n");
+		exit(1);
+	} else {
+		getconfig(argv[1], hpr);
+	}
+	#endif
+
+	#ifdef DEBUG
+	get_config("config-file", hpr);
+	#endif
+
+	/*
+	int event = EV_INIT;
 	status = ST_INIT;
 	fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
 	while (1) {
@@ -91,12 +143,14 @@ int main(int argc, char const* argv[])
 		event = wait_event(hpr);
 		print_event(event);
 	}
+	*/
 
 	return 0;
 }
 
 int wait_event(struct dhcphead *hpr)
 {
+	/*
 	switch (status) {
 		case ST_SEND_DISCOVER:
 			return EV_SEND_DISCOVER;		// DISCOVER has sent
@@ -113,5 +167,6 @@ int wait_event(struct dhcphead *hpr)
 			}
 			break;
 	}
+	*/
 	return 0;
 }
