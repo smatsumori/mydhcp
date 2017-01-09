@@ -273,7 +273,7 @@ int recvack(struct dhcphead *hpr)
 		if (FD_ISSET(hpr->mysocd, &rdfds)) {
 			sktlen = sizeof *(hpr->socaddptr);
 			if ((count = recvfrom(hpr->mysocd, &recvpacket, sizeof recvpacket, 0,
-							(struct sockaddr *)hpr->socaddptr, &sktlen))) {
+							(struct sockaddr *)hpr->socaddptr, &sktlen)) < 0) {
 				report_error_and_exit(ERR_RECVFROM, "recvoffer");
 				
 				if (recvpacket.op == DHCP_OFFER) {
