@@ -102,27 +102,32 @@ struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct clie
 {
 	// TODO: remove clhpr (don't need this)
 	/* malloc for cpr */
+	fprintf(stderr, "\nInserting new client\n");
 	struct client *cpr_m;
 	if ((cpr_m = (struct client *)malloc(sizeof(struct client))) == NULL) 
 		report_error_and_exit(ERR_MALLOC, "set_cltab");
 
 	*cpr_m = *cpr;		// copy instance 
-
 	cpr_m->id = ++(hpr->clients_online);
 
 	cpr_m->fp = clhpr;
 	cpr_m->bp = clhpr->bp;
 	clhpr->bp->fp = cpr_m;
 	clhpr->bp = cpr_m;
-
 	printf("[NEW CLIENT] ID:%2d  ", cpr_m->id);
-	printf("IPADDR(ID): %s  ", inet_ntoa(cpr_m->addr));
+	printf("IPADDR(ID): %s\n", inet_ntoa(cpr_m->id_addr));
 	return cpr_m;
 }
 
 struct client *find_cltab(struct dhcphead *hpr, struct in_addr id_addr)
 {
 	/* find designated client with in_addr */
+	struct client *sptr;
+
+	for (sptr = hpr->clisthpr->fp; sptr->id != 0; sptr = sptr->fp) {
+		if (sptr->id_addr.s_addr == id_addr.s_addr)		// found
+			return sptr;
+	}
 	return NULL;
 }
 
@@ -137,15 +142,16 @@ void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 	*ipr_m = *ipr;		// copy (not sure if this works)
 	ipr_m->id = ++(hpr->ipsets);	/* set number of ips */
 
-	printf("[SET] ID:%2d  ", ipr_m->id);
-	printf("IPADDR: %s  ", inet_ntoa(ipr_m->addr));
-	printf("NETMASK: %s\n", inet_ntoa(ipr_m->netmask));
 
 	/* set ip to ippool */
 	ipr_m->fp = iphpr;
 	ipr_m->bp = iphpr->bp;
 	iphpr->bp->fp = ipr_m;
 	iphpr->bp = ipr_m;
+
+	printf("[SET] ID:%2d  ", ipr_m->id);
+	printf("IPADDR: %s  ", inet_ntoa(ipr_m->addr));
+	printf("NETMASK: %s\n", inet_ntoa(ipr_m->netmask));
 
 	return;
 }
