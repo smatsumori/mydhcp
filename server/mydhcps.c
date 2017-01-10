@@ -12,6 +12,7 @@
 #define EV_RECV_REQUEST_C2 201
 #define EV_RECV_REQUEST_C3 202
 #define EV_RECV_RELEASE 203
+#define EV_RECV_DISCOVER_NOIP 204
 
 #define ST_INIT 1
 #define ST_SEND_DISCOVER 2
@@ -40,19 +41,22 @@ static struct ippool iplist_head = {
 
 static struct dhcphead dhcph = {
 	.client_id = 0, .clisthpr = &clist_head, .iplisthpr = &iplist_head,
-	.ipsets = 0, .clients_online = 0
+	.ipsets = 0, .clients_online = 0, .clients = 0
 };
 
 static struct eventtable etab[] = {
 	{EV_INIT, "EV_INIT", ""},
 	{EV_RECV_DISCOVER, "EV_RECV_DISCOVER", "Recieve DISCOVER"},
+	{EV_RECV_DISCOVER_NOIP, "EV_RECV_DISCOVER_NOIP", "Recieve DISCPVER but no IP available."},
 	{EV_RECV_REQUEST_C2, "EV_RECV_REQUEST_C2", "Recieve REQUEST Code = 2 (ALLOC)"},
 	{EV_RECV_REQUEST_C3, "EV_RECV_REQUEST_C3", "Recieve REQUEST Code = 3 (EXTEND)"},
-	{EV_RECV_RELEASE, "EV_RECV_RELEASE", "Recieve RELEASE"}
+	{EV_RECV_RELEASE, "EV_RECV_RELEASE", "Recieve RELEASE"},
+	{0, "", ""}
 };
 
 static struct proctable ptab[]= {		// TODO: handle invalid msg
 	{ST_WAIT_DISCOVER, EV_RECV_DISCOVER, send_offer, ST_WAIT_REQUEST},
+	{ST_WAIT_DISCOVER,EV_RECV_DISCOVER_NOIP, client_exit, ST_EXIT},
 	{ST_WAIT_REQUEST, EV_RECV_REQUEST_C2, send_ack, ST_IP_RENTED},
 	{ST_IP_RENTED, EV_RECV_REQUEST_C3, send_ack, ST_IP_RENTED},
 	{ST_IP_RENTED, EV_RECV_RELEASE, client_exit, ST_EXIT},
@@ -158,7 +162,7 @@ int main(int argc, char const* argv[])
 
 		/** below executing client FSM **/
 		fprintf(stderr, "\n********Now taking care of CLIENT: %2d********\n\n", hpr->cliincmd->id);
-		fprintf(stderr, "\n--------STATUS: %2d--------\n\n", hpr->cliincmd->status);
+		fprintf(stderr, "\n--------- STATUS: %2d ---------\n\n", hpr->cliincmd->status);
 		event = wait_event(hpr);
 		print_event(event);
 		for (ptptr = ptab; ptptr -> status; ptptr++) {
@@ -166,6 +170,7 @@ int main(int argc, char const* argv[])
 					(*ptptr -> func)(hpr);
 					hpr->cliincmd->status = ptptr->nextstatus;
 					fprintf(stderr, "moving to status: %2d\n", hpr->cliincmd->status);
+					fprintf(stderr, "\n-------- STATUS END ---------\n\n", hpr->cliincmd->status);
 					break;
 				}
 		}
@@ -194,11 +199,42 @@ int global_event_dispatcher(struct dhcphead *hpr)
 
 int wait_event(struct dhcphead *hpr)
 {
+	// TODO: handle signal
+	int code, errno;
 	switch (hpr->cliincmd->status) {
 		case ST_WAIT_DISCOVER:
-			// call get_discover
-			return EV_RECV_DISCOVER;		// DISCOVER has sent
+			switch (dhcp_packet_handler(hpr, &code, &errno)) {
+				case DHCP_DISCOVER:
+					if ((hpr->ipsets - hpr->clients_online) == 0) 
+						return EV_RECV_DISCOVER_NOIP;		// no ip available
+					return EV_RECV_DISCOVER;
+			}
+		
+		case ST_WAIT_REQUEST:
+			switch (dhcp_packet_handler(hpr, &code, &errno)) {
+				case DHCP_REQUEST:
+					if (errno == INVALID_PACKET) {
+						switch (code) {
+							case CODE_REQALLOC:
+								return EV_RECV_REQUEST_C2;
+							case CODE_REQEXTEND:
+								return EV_RECV_REQUEST_C3;
+						}
+					} else {
+						return 0;	//TODO: return EV
+					}
+			}
 
+		case ST_IP_RENTED:
+			// TODO: check timeout
+			break;
+
+		case ST_EXIT:
+			// TODO: impelement
+			break;
+
+		default:
+			break;
 	}
 	return 0;
 }
@@ -216,6 +252,8 @@ int global_client_selector(struct dhcphead *hpr)
 	if ((cli = find_cltab(hpr, hpr->socaddptr->sin_addr)) == NULL) {	// not found
 		fprintf(stderr, "Client NOT found: IPADDR: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
 		newclient.id_addr = hpr->socaddptr->sin_addr;		// set ID(ipaddr) for a new client
+		newclient.port = hpr->socaddptr->sin_port;
+		newclient.status = ST_WAIT_DISCOVER;
 		hpr->cliincmd = set_cltab(hpr, hpr->clisthpr, &newclient);		// set new client to table
 	} else {		// found
 		fprintf(stderr, "Client found: ID:%2d IPADDR: %s\n", cli->id, inet_ntoa(cli->id_addr));

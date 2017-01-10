@@ -11,6 +11,8 @@
 // TODO: move to utils
 #define ERR_SOCKET 113
 #define ERR_BIND 114
+#define VALID_PACKET 1
+#define INVALID_PACKET -1
 
 /*** PROTOTYPES ***/
 struct dhcphead;
@@ -24,6 +26,7 @@ struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct clie
 /*** DHCPHEAD ***/
 struct dhcphead{
 	int ipsets;
+	int clients;
 	int clients_online;
 	int client_id;
 	int mysocd;
@@ -62,7 +65,7 @@ void global_init(struct dhcphead *hpr)
 	fprintf(stderr, "DHCP server's IP: %s:%d\n", 
 			inet_ntoa(myskt.sin_addr), DHCP_SERV_PORT);
 
-	fprintf(stderr, "Initialization complete!\n");
+	fprintf(stderr, "Initialization complete!\n\n\n");
 
 	return;
 }
@@ -108,7 +111,7 @@ struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct clie
 		report_error_and_exit(ERR_MALLOC, "set_cltab");
 
 	*cpr_m = *cpr;		// copy instance 
-	cpr_m->id = ++(hpr->clients_online);
+	cpr_m->id = ++(hpr->clients);
 
 	cpr_m->fp = clhpr;
 	cpr_m->bp = clhpr->bp;
@@ -198,18 +201,18 @@ int recvpacket(struct dhcphead *hpr)
 	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
 		report_error_and_exit(ERR_SELECT, "recvmsg");
 	} else if (rv == 0) {		// timeout
-		fprintf(stderr, "Time out. No data after %d secs.\n", MSG_TIMEOUT);
+		fprintf(stderr, "[FAIL] Time out. No data after %d secs.\n", MSG_TIMEOUT);
 		return -1;
 	} else {	// data recieved
 		if (FD_ISSET(hpr->mysocd, &rdfds)) {
-			sktlen = sizeof *(hpr->socaddptr);
+			sktlen = sizeof *(hpr->socaddptr);		// socaddptr = client sockaddr
 			if ((count = recvfrom(hpr->mysocd, &hpr->recvpacket, sizeof hpr->recvpacket, 0,
 							(struct sockaddr *)hpr->socaddptr, &sktlen)) < 0) {		// recv message
 				report_error_and_exit(ERR_RECVFROM, "recvmsg");
 			}
-			printf("DATA RECIEVED\n");
-			// TODO: FIX FAITAL BUG
-			printf("FROM: %s LENGTH: %d \n", inet_ntoa(hpr->socaddptr->sin_addr), count);
+			printf("[SUCCSESS] DATA RECIEVED\n");
+			printf("FROM: %s", inet_ntoa(hpr->socaddptr->sin_addr));
+			printf(":%d LENGTH: %d \n", ntohs(hpr->socaddptr->sin_port), count);
 			return 0;
 		}
 	}
@@ -225,8 +228,32 @@ void init(struct dhcphead *hpr)
 
 void send_offer(struct dhcphead *hpr)
 {
-	// TODO: implement
+	// TODO: impl CODE_ERR
+	fprintf(stderr, "Send OFFER\n");
+	struct dhcp_packet dpacket = {		// do we really need ciaddr?
+		.op = DHCP_OFFER, .code = CODE_OK, 
+		.ttl = hpr->iplisthpr->ttl, .ciaddr = hpr->cliincmd->id_addr, 
+		.ciport = hpr->cliincmd->port, .ipaddr = hpr->cliincmd->addr,
+		.netmask = hpr->cliincmd->netmask
+	};
+
+	/* set client socket from recvpacket information */
+	/* DO WE NEED THIS? */
+	hpr->socaddptr->sin_family = AF_INET;
+	//hpr->socaddptr->sin_port = htons(DHCP_CLI_PORT);		// TODO: add port to struct client
+	hpr->socaddptr->sin_addr = hpr->cliincmd->id_addr;
+	hpr->socaddptr->sin_port = hpr->cliincmd->port;
 	
+	fprintf(stderr, "Seinding OFFER to: %s", inet_ntoa(hpr->socaddptr->sin_addr));
+	fprintf(stderr, ":%d\n", ntohs(hpr->socaddptr->sin_port));
+	int dsize;		/* rval is data size sent */
+	if ((dsize = sendto(hpr->mysocd, &dpacket, sizeof dpacket, 0,
+					(struct sockaddr *)(hpr->socaddptr), sizeof *(hpr->socaddptr))) < 0) {
+		report_error_and_exit(ERR_SENDTO, "sendto");
+	}
+	fprintf(stderr, "[SUCCSESS]SENT: OFFER ");
+	fprintf(stderr, "SIZE: %d ", dsize);
+	fprintf(stderr, "For rent: %s\n", inet_ntoa(dpacket.ipaddr));
 	return;
 }
 
@@ -241,4 +268,36 @@ void client_exit(struct dhcphead *hpr)
 	// TODO: implement
 	return;
 }
+
+
+/*** EVENT FUCNTION ***/
+int dhcp_packet_handler(struct dhcphead *hpr, int *code, int *errno)
+{
+	switch (hpr->recvpacket.op) {
+		case DHCP_DISCOVER:
+			return DHCP_DISCOVER;
+		
+		case DHCP_REQUEST:
+			if (hpr->recvpacket.ipaddr.s_addr != hpr->cliincmd->addr.s_addr) {
+				fprintf(stderr, "INVALID IP\n");
+				*errno = INVALID_PACKET;
+				return DHCP_REQUEST;
+			} else if (hpr->recvpacket.netmask.s_addr != hpr->cliincmd->netmask.s_addr) {
+				fprintf(stderr, "INVALID NETMASK\n");
+				*errno = INVALID_PACKET;
+				return DHCP_REQUEST;
+			} else if (hpr->recvpacket.ttl > hpr->cliincmd->ttl) {
+				fprintf(stderr, "INVALID TTL\n");
+				*errno = INVALID_PACKET;
+				return DHCP_REQUEST;
+			} else {		// IF valid
+				*errno = VALID_PACKET;
+				*code = hpr->recvpacket.code;
+				return DHCP_REQUEST;
+			}
+
+	}
+	return 0;
+}
+
 #endif
