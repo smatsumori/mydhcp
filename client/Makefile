@@ -6,13 +6,13 @@ DEPS = mydhcpc.h packet.h
 
 LDFLAGS =
 CFLAGS = -g -O
-DFLAGS = -g
+DFLAGS = -D DEBUG
 
 RM = rm -f
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS) $(DEPS)
+$(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(DFLAGS) -o $@ $^
 
 .c.o:
