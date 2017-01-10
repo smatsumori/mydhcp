@@ -88,6 +88,19 @@ void alrm_func()
 
 int main(int argc, char const* argv[])
 {
+	char ipaddr[16] = DHCP_SERV_IPADDR;
+	#ifdef DEBUG
+		fprintf(stderr, "Running on DEBUG mode\n");
+	#endif
+	#ifndef DEBUG
+		if (argc != 2) {
+			fprintf(stderr, "Usage: ./mydhcpc.out <server IP>\n");
+			exit(1);
+		} else {
+			strcpy(ipaddr, argv[1]);
+		}
+	#endif
+
 	signal(SIGHUP, sighup_func);		// handle SIGHUP
 	struct proctable *ptptr;
 	struct dhcphead *hpr = &dhcph;

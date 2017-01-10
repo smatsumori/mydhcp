@@ -1,6 +1,8 @@
 #ifndef __MYDHCPC__
 #define __MYDHCPC__
 /* Header File */
+
+#define ERR_ATON 10
 #include "../utils/packet.h"
 #include "../utils/utils.h"
 
@@ -55,11 +57,17 @@ void init(struct dhcphead *hpr)
 	fprintf(stderr, "Socket descriptor: %d\n", socd);
 	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
 	/* set server socket */
+	// TODO: something wrong with this
+	/*
 	assert(inet_aton(DHCP_SERV_IPADDR, &ipaddr) == 1);	// set dhcp serv ip
 	ipaddr.s_addr = htonl(ipaddr.s_addr);		// converting to network byte order
+	skt.sin_addr.s_addr = htonl(ipaddr.s_addr);		// set ipaddr
+	*/
 	skt.sin_family = AF_INET;		// set address family
 	skt.sin_port = htons(DHCP_SERV_PORT);		// port num
-	skt.sin_addr.s_addr = htonl(ipaddr.s_addr);		// set ipaddr
+	if (inet_aton(DHCP_SERV_IPADDR, &skt.sin_addr) == 0)
+		report_error_and_exit(ERR_ATON, "init");
+	
 
 	hpr->socaddptr = &skt;
 	hpr->mysocd = socd;
@@ -200,6 +208,7 @@ int recvoffer(struct dhcphead *hpr)
 	 *  1: recv offer (error)
 	 */
 	/* ports already set */
+	fprintf(stderr, "Recieving OFFER\n");
 	int rv, count;
 	socklen_t sktlen;		// size of server's socket length
 	struct dhcp_packet recvpacket;
@@ -218,7 +227,8 @@ int recvoffer(struct dhcphead *hpr)
 		return -1;
 	} else {		// data recieved
 		if (FD_ISSET(hpr->mysocd, &rdfds)) {
-			sktlen = sizeof *(hpr->socaddptr);
+			sktlen = sizeof *(hpr->socaddptr);	// set size
+
 			if ((count = recvfrom(hpr->mysocd, &recvpacket, sizeof recvpacket, 0,
 							(struct sockaddr *)hpr->socaddptr, &sktlen))) {
 				report_error_and_exit(ERR_RECVFROM, "recvoffer");
@@ -226,9 +236,9 @@ int recvoffer(struct dhcphead *hpr)
 				if (recvpacket.op == DHCP_OFFER) {
 					switch (recvpacket.code) {
 						case CODE_OK:
-							hpr->servttl = recvpacket.ttl;
-							hpr->ipaddr = recvpacket.ipaddr;
-							hpr->netmask = recvpacket.netmask;
+							hpr->servttl = recvpacket.ttl;		// set ttl
+							hpr->ipaddr = recvpacket.ipaddr;		// set ipaddress (can allocate)
+							hpr->netmask = recvpacket.netmask;		// set netmask
 							return 0;
 						case CODE_ERR:
 							return 1;
