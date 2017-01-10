@@ -22,6 +22,8 @@ struct proctable;
 
 void set_iptab(struct dhcphead *, struct ippool *, struct ippool *);
 struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct client *cpr);
+struct ippool *get_iptab(struct ippool *iphpr);
+void print_all_iptab(struct ippool *iphpr);
 
 /*** DHCPHEAD ***/
 struct dhcphead{
@@ -73,13 +75,6 @@ void global_init(struct dhcphead *hpr)
 
 /*** FSM ***/
 
-struct eventtable {
-	int id;
-	char name[MAX_NAME];
-	char description[MAX_DESCRIPTION];
-};
-
-
 struct proctable {
 	int status;
 	int event;	/* input */
@@ -119,16 +114,19 @@ struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct clie
 	clhpr->bp = cpr_m;
 	printf("[NEW CLIENT] ID:%2d  ", cpr_m->id);
 	printf("IPADDR(ID): %s\n", inet_ntoa(cpr_m->id_addr));
+
+	/* set IP for a rent */
+	cpr_m->ippptr = get_iptab(hpr->iplisthpr);
 	return cpr_m;
 }
 
-struct client *find_cltab(struct dhcphead *hpr, struct in_addr id_addr)
+struct client *find_cltab(struct dhcphead *hpr, struct in_addr id_addr, in_port_t id_port)
 {
 	/* find designated client with in_addr */
 	struct client *sptr;
 
 	for (sptr = hpr->clisthpr->fp; sptr->id != 0; sptr = sptr->fp) {
-		if (sptr->id_addr.s_addr == id_addr.s_addr)		// found
+		if (sptr->id_addr.s_addr == id_addr.s_addr && sptr->port == id_port)		// found
 			return sptr;
 	}
 	return NULL;
@@ -145,6 +143,7 @@ void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 	*ipr_m = *ipr;		// copy (not sure if this works)
 	ipr_m->id = ++(hpr->ipsets);	/* set number of ips */
 
+	ipr_m->ttl = hpr->iplisthpr->ttl;
 
 	/* set ip to ippool */
 	ipr_m->fp = iphpr;
@@ -159,14 +158,29 @@ void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 	return;
 }
 
-void get_iptab(struct ippool *iphpr)
+struct ippool *get_iptab(struct ippool *iphpr)
 {
-	return;
+	/* get ip from ip pool */
+	struct ippool *sp = iphpr;
+	
+	sp = iphpr->fp;
+	sp->fp->bp = iphpr;
+	sp->bp->fp = sp->fp;
+
+	/* remove connections */
+	sp->fp = sp;
+	sp->bp = sp;
+
+	fprintf(stderr, "IP for rent: %s\n", inet_ntoa(sp->addr));
+
+	fprintf(stderr, "\n***  REMAINING  ***\n");
+	print_all_iptab(iphpr);
+	return sp;
 }
 
 void print_all_iptab(struct ippool *iphpr)
 {
-	fprintf(stderr, "\n*** LIST OF IPTABLE***\n");
+	fprintf(stderr, "\n*** LIST OF IPTABLE ***\n");
 	struct ippool *sp = iphpr;
 	for (sp = sp->fp; sp->id != 0; sp = sp->fp) {
 		printf("[SET] ID:%2d  ", sp->id);
@@ -178,6 +192,13 @@ void print_all_iptab(struct ippool *iphpr)
 
 void free_iptab(struct ippool *iphpr)
 {
+	struct ippool *sp = iphpr;
+	struct ippool *np;
+	for (sp = sp->fp; sp != iphpr;) {
+		np = sp->fp;
+		free(sp);
+		sp = np;
+	}
 	return;
 }
 
@@ -233,8 +254,8 @@ void send_offer(struct dhcphead *hpr)
 	struct dhcp_packet dpacket = {		// do we really need ciaddr?
 		.op = DHCP_OFFER, .code = CODE_OK, 
 		.ttl = hpr->iplisthpr->ttl, .ciaddr = hpr->cliincmd->id_addr, 
-		.ciport = hpr->cliincmd->port, .ipaddr = hpr->cliincmd->addr,
-		.netmask = hpr->cliincmd->netmask
+		.ciport = hpr->cliincmd->port, .ipaddr = hpr->cliincmd->ippptr->addr,
+		.netmask = hpr->cliincmd->ippptr->netmask
 	};
 
 	/* set client socket from recvpacket information */
@@ -259,7 +280,33 @@ void send_offer(struct dhcphead *hpr)
 
 void send_ack(struct dhcphead *hpr)
 {
-	// TODO: implement
+	// TODO: implement CODE_ERR
+	fprintf(stderr, "Send ACK\n");
+	struct dhcp_packet dpacket = {		// do we really need ciaddr?
+		.op = DHCP_ACK, .code = CODE_OK, 
+		.ttl = hpr->iplisthpr->ttl, .ciaddr = hpr->cliincmd->id_addr, 
+		.ciport = hpr->cliincmd->port, .ipaddr = hpr->cliincmd->ippptr->addr,
+		.netmask = hpr->cliincmd->ippptr->netmask
+	};
+
+	/* set client socket from recvpacket information */
+	/* DO WE NEED THIS? */
+	hpr->socaddptr->sin_family = AF_INET;
+	//hpr->socaddptr->sin_port = htons(DHCP_CLI_PORT);		// TODO: add port to struct client
+	hpr->socaddptr->sin_addr = hpr->cliincmd->id_addr;
+	hpr->socaddptr->sin_port = hpr->cliincmd->port;
+	
+	fprintf(stderr, "Seinding ACK to: %s", inet_ntoa(hpr->socaddptr->sin_addr));
+	fprintf(stderr, ":%d\n", ntohs(hpr->socaddptr->sin_port));
+	int dsize;		/* rval is data size sent */
+	if ((dsize = sendto(hpr->mysocd, &dpacket, sizeof dpacket, 0,
+					(struct sockaddr *)(hpr->socaddptr), sizeof *(hpr->socaddptr))) < 0) {
+		report_error_and_exit(ERR_SENDTO, "sendto");
+	}
+	// TODO: check user's ttl
+	fprintf(stderr, "[SUCCSESS]SENT: ACK ");
+	fprintf(stderr, "SIZE: %d ", dsize);
+	fprintf(stderr, "Allow using: %s\n", inet_ntoa(dpacket.ipaddr));
 	return;
 }
 
@@ -275,18 +322,20 @@ int dhcp_packet_handler(struct dhcphead *hpr, int *code, int *errno)
 {
 	switch (hpr->recvpacket.op) {
 		case DHCP_DISCOVER:
+			fprintf(stderr, "Message is DHCP_DISCOVER\n");
 			return DHCP_DISCOVER;
 		
 		case DHCP_REQUEST:
-			if (hpr->recvpacket.ipaddr.s_addr != hpr->cliincmd->addr.s_addr) {
+			fprintf(stderr, "Message is DHCP_REQUEST\n");
+			if (hpr->recvpacket.ipaddr.s_addr != hpr->cliincmd->ippptr->addr.s_addr) {
 				fprintf(stderr, "INVALID IP\n");
 				*errno = INVALID_PACKET;
 				return DHCP_REQUEST;
-			} else if (hpr->recvpacket.netmask.s_addr != hpr->cliincmd->netmask.s_addr) {
+			} else if (hpr->recvpacket.netmask.s_addr != hpr->cliincmd->ippptr->netmask.s_addr) {
 				fprintf(stderr, "INVALID NETMASK\n");
 				*errno = INVALID_PACKET;
 				return DHCP_REQUEST;
-			} else if (hpr->recvpacket.ttl > hpr->cliincmd->ttl) {
+			} else if (hpr->recvpacket.ttl > hpr->cliincmd->ippptr->ttl) {
 				fprintf(stderr, "INVALID TTL\n");
 				*errno = INVALID_PACKET;
 				return DHCP_REQUEST;

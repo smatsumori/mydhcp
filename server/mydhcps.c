@@ -54,6 +54,14 @@ static struct eventtable etab[] = {
 	{0, "", ""}
 };
 
+static struct eventtable stab[] = {
+	{ST_WAIT_DISCOVER, "ST_WAIT_DISCOVER", ""},
+	{ST_WAIT_REQUEST, "ST_WAIT_REQUEST", ""},
+	{ST_IP_RENTED, "ST_IP_RENTED", ""},
+	{ST_EXIT, "ST_EXIT", ""},
+	{0, "", ""}
+};
+
 static struct proctable ptab[]= {		// TODO: handle invalid msg
 	{ST_WAIT_DISCOVER, EV_RECV_DISCOVER, send_offer, ST_WAIT_REQUEST},
 	{ST_WAIT_DISCOVER,EV_RECV_DISCOVER_NOIP, client_exit, ST_EXIT},
@@ -114,20 +122,6 @@ void get_config(const char *configfile, struct dhcphead *hpr)
 	return;
 }
 
-void print_event(int id)
-{
-	struct eventtable *evptr;
-	for (evptr = etab; evptr->id != 0; evptr++) {
-		if (evptr->id == id) {
-			fprintf(stderr, "##Event:%2d :: %2s :: %s##\n",
-				 	evptr->id, evptr->name, evptr->description);
-			return;
-		}
-	}
-	fprintf(stderr, "error: print_event\n");
-	return;
-}
-
 
 /*** MAIN ***/
 int main(int argc, char const* argv[])
@@ -158,19 +152,24 @@ int main(int argc, char const* argv[])
 	while(1) {
 		// TODO: show client status
 		global_event = global_event_dispatcher(hpr);		// get global event
+		if (global_event == GLOBAL_EV_TIMEOUT)
+			continue;
 		global_client_selector(hpr);		// select client in command
 
+
 		/** below executing client FSM **/
-		fprintf(stderr, "\n********Now taking care of CLIENT: %2d********\n\n", hpr->cliincmd->id);
-		fprintf(stderr, "\n--------- STATUS: %2d ---------\n\n", hpr->cliincmd->status);
+		fprintf(stderr, "\n\n********Now taking care of CLIENT: %2d********\n", hpr->cliincmd->id);
+		print_status(hpr->cliincmd->status, stab);
+
 		event = wait_event(hpr);
-		print_event(event);
+		print_event(event, etab);
+
 		for (ptptr = ptab; ptptr -> status; ptptr++) {
 				if (ptptr -> status == hpr->cliincmd->status && ptptr -> event == event) {
 					(*ptptr -> func)(hpr);
 					hpr->cliincmd->status = ptptr->nextstatus;
 					fprintf(stderr, "moving to status: %2d\n", hpr->cliincmd->status);
-					fprintf(stderr, "\n-------- STATUS END ---------\n\n", hpr->cliincmd->status);
+					fprintf(stderr, "-------- STATUS END ---------\n\n\n", hpr->cliincmd->status);
 					break;
 				}
 		}
@@ -213,20 +212,33 @@ int wait_event(struct dhcphead *hpr)
 		case ST_WAIT_REQUEST:
 			switch (dhcp_packet_handler(hpr, &code, &errno)) {
 				case DHCP_REQUEST:
-					if (errno == INVALID_PACKET) {
+					if (errno != INVALID_PACKET) {
 						switch (code) {
-							case CODE_REQALLOC:
+							case CODE_REQALLOC:	// proper
 								return EV_RECV_REQUEST_C2;
 							case CODE_REQEXTEND:
 								return EV_RECV_REQUEST_C3;
 						}
-					} else {
+					} else {		// if INVALID
 						return 0;	//TODO: return EV
 					}
 			}
 
 		case ST_IP_RENTED:
 			// TODO: check timeout
+			switch(dhcp_packet_handler(hpr, &code, &errno)) {
+				case DHCP_REQUEST:
+					if (errno != INVALID_PACKET) {
+						switch (code) {
+							case CODE_REQALLOC:
+								return EV_RECV_REQUEST_C2;
+							case CODE_REQEXTEND:		// proper
+								return EV_RECV_REQUEST_C3;
+						}
+					} else {		// if INVALID
+						return 0;	//TODO: return EV
+					}
+			}
 			break;
 
 		case ST_EXIT:
@@ -249,7 +261,8 @@ int global_client_selector(struct dhcphead *hpr)
 
 	fprintf(stderr, "Looking for client...:%s\n", inet_ntoa(hpr->socaddptr->sin_addr));
 	
-	if ((cli = find_cltab(hpr, hpr->socaddptr->sin_addr)) == NULL) {	// not found
+	if ((cli = find_cltab(hpr, hpr->socaddptr->sin_addr, 
+					hpr->socaddptr->sin_port)) == NULL) {	// not found
 		fprintf(stderr, "Client NOT found: IPADDR: %s\n", inet_ntoa(hpr->socaddptr->sin_addr));
 		newclient.id_addr = hpr->socaddptr->sin_addr;		// set ID(ipaddr) for a new client
 		newclient.port = hpr->socaddptr->sin_port;
