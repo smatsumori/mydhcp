@@ -1,19 +1,8 @@
 #ifndef __MYDHCPC__
 #define __MYDHCPC__
 /* Header File */
-
-#define ERR_ATON 10
-#define ERR_SOCKET 11
-#define ERR_BIND 12
 #include "../utils/packet.h"
 #include "../utils/utils.h"
-
-#include <assert.h>
-#include <sys/select.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <signal.h>
-#include <strings.h>
 
 
 /* dhcphead used for passing socket descriptor for the machine
@@ -46,6 +35,13 @@ void init(struct dhcphead *hpr)
 	fprintf(stderr, "Initialization\n");
 	
 	/* Begin initialization */
+	int suffix;
+	printf("Set client port: %d + ", DHCP_CLI_PORT);
+	scanf("%d", &suffix);
+
+	if(DHCP_CLI_PORT + suffix == DHCP_SERV_PORT) {
+		fprintf(stderr, "Cannot use DHCP_SERV_PORT: %d\n", DHCP_SERV_PORT);
+	}
 
 	/* bind client socket */
 	int socd;
@@ -57,7 +53,7 @@ void init(struct dhcphead *hpr)
 	struct sockaddr_in myskt;		// socket for client
 	bzero(&myskt, sizeof myskt);
 	myskt.sin_family = AF_INET;
-	myskt.sin_port = htons(DHCP_CLI_PORT);		// NEED TO SET PORT
+	myskt.sin_port = htons(DHCP_CLI_PORT + suffix);		// NEED TO SET PORT
 	myskt.sin_addr.s_addr = htonl(INADDR_ANY);		// any IP for client
 
 	if (bind(socd, (struct sockaddr *)&myskt, sizeof myskt) < 0)

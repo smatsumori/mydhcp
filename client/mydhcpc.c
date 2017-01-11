@@ -97,10 +97,11 @@ int main(int argc, char const* argv[])
 			strcpy(ipaddr, argv[1]);
 		}
 	#endif
-
-	signal(SIGHUP, sighup_func);		// handle SIGHUP
 	struct proctable *ptptr;
 	struct dhcphead *hpr = &dhcph;
+
+
+	signal(SIGHUP, sighup_func);		// handle SIGHUP
 	int event = EV_INIT;	/* Initialization */
 	status = ST_INIT;
 	fprintf(stderr, "\n--------STATUS: %2d--------\n", status);

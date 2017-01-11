@@ -4,15 +4,12 @@
 #include "../utils/packet.h"
 #include "../utils/utils.h"
 #include "./client.h"
-#include <string.h>
-#include <assert.h>
 
 /*** ERROR ***/
 // TODO: move to utils
-#define ERR_SOCKET 113
-#define ERR_BIND 114
 #define VALID_PACKET 1
 #define INVALID_PACKET -1
+#define CONNECTION_TIMEOUT 10
 
 /*** PROTOTYPES ***/
 struct dhcphead;
@@ -22,8 +19,15 @@ struct proctable;
 
 void set_iptab(struct dhcphead *, struct ippool *, struct ippool *);
 struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct client *cpr);
+struct client *find_cltab(struct dhcphead *hpr, struct in_addr id_addr, in_port_t id_port);
+void update_cltab_ttlcnt(struct dhcphead *hpr, int consumed);
+struct client *get_tout_client(struct dhcphead *hpr);
+void remove_cltab(struct dhcphead *hpr);
+void print_all_cltab(struct client *clhpr);
 struct ippool *get_iptab(struct ippool *iphpr);
 void print_all_iptab(struct ippool *iphpr);
+
+
 
 /*** DHCPHEAD ***/
 struct dhcphead{
@@ -96,11 +100,12 @@ struct ippool {
 
 
 /*** ACCESSOR ***/
+/*** CLIENT TABLE ***/
 struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct client *cpr)
 {
 	// TODO: remove clhpr (don't need this)
 	/* malloc for cpr */
-	fprintf(stderr, "\nInserting new client\n");
+	//fprintf(stderr, "\nInserting new client\n");
 	struct client *cpr_m;
 	if ((cpr_m = (struct client *)malloc(sizeof(struct client))) == NULL) 
 		report_error_and_exit(ERR_MALLOC, "set_cltab");
@@ -117,6 +122,8 @@ struct client *set_cltab(struct dhcphead *hpr, struct client *clhpr, struct clie
 
 	/* set IP for a rent */
 	cpr_m->ippptr = get_iptab(hpr->iplisthpr);
+
+	/* set ttlcount */
 	return cpr_m;
 }
 
@@ -132,7 +139,56 @@ struct client *find_cltab(struct dhcphead *hpr, struct in_addr id_addr, in_port_
 	return NULL;
 }
 
+void update_cltab_ttlcnt(struct dhcphead *hpr, int consumed)
+{
+	
+	struct client *sptr;
+	for (sptr = hpr->clisthpr->fp; sptr->id != 0; sptr = sptr->fp) {
+		sptr->ttlcounter -= consumed;
+		if (0 < sptr->ttlcounter) {
+			fprintf(stderr, "CLIENT %2d: remaining %2d\n", sptr->id, sptr->ttlcounter);
+		}
+	}
+	return;
+}
 
+struct client *get_tout_client(struct dhcphead *hpr)
+{
+	struct client *sptr;
+	for (sptr = hpr->clisthpr->fp; sptr->id != 0; sptr = sptr->fp) {
+		if (sptr->ttlcounter <= 0) {
+			fprintf(stderr, "CLIENT %2d: Timeout!(%2d secs)\n", sptr->id, 10 -(sptr->ttlcounter));
+			return sptr;
+		}
+	}
+	return NULL;
+}
+
+void remove_cltab(struct dhcphead *hpr)
+{
+	struct client *sptr = hpr->cliincmd;
+	fprintf(stderr, "Removing client ID: %2d\n", sptr->id);
+	sptr->bp->fp = sptr->fp;
+	sptr->fp->bp = sptr->bp;
+	free(sptr);
+	return;
+}
+
+void print_all_cltab(struct client *clhpr)
+{
+	fprintf(stderr, "\n*** LIST OF CLIENTS ***\n");
+	struct client *sp = clhpr;
+	for (sp = sp->fp; sp->id != 0; sp = sp->fp) {
+		printf("[ID:%2d]  ", sp->id);
+		printf("IPADDR(ID): %s ", inet_ntoa(sp->id_addr));
+		printf("IPADDR: %s  ", inet_ntoa(sp->addr));
+		printf("NETMASK: %s  ", inet_ntoa(sp->netmask));
+		printf("TTLCOUNTER: %2d\n", sp->ttlcounter);
+	}
+	return;
+}
+
+/**** IPTABLES ****/
 void set_iptab(struct dhcphead *hpr, struct ippool *iphpr, struct ippool *ipr)
 {
 	/* malloc for ipr */
@@ -173,8 +229,10 @@ struct ippool *get_iptab(struct ippool *iphpr)
 
 	fprintf(stderr, "IP for rent: %s\n", inet_ntoa(sp->addr));
 
+	/*
 	fprintf(stderr, "\n***  REMAINING  ***\n");
 	print_all_iptab(iphpr);
+	*/
 	return sp;
 }
 
@@ -210,7 +268,7 @@ int recvpacket(struct dhcphead *hpr)
 	int rv, count;
 	socklen_t sktlen; // size of client's socket
 	struct timeval timeout = {
-		.tv_sec = MSG_TIMEOUT,
+		.tv_sec = 0,
 	};
 
 	// socket already binded
@@ -222,7 +280,7 @@ int recvpacket(struct dhcphead *hpr)
 	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
 		report_error_and_exit(ERR_SELECT, "recvmsg");
 	} else if (rv == 0) {		// timeout
-		fprintf(stderr, "[FAIL] Time out. No data after %d secs.\n", MSG_TIMEOUT);
+		fprintf(stderr, "[NO PACKET] Waiting...\r", MSG_TIMEOUT);
 		return -1;
 	} else {	// data recieved
 		if (FD_ISSET(hpr->mysocd, &rdfds)) {
@@ -231,7 +289,7 @@ int recvpacket(struct dhcphead *hpr)
 							(struct sockaddr *)hpr->socaddptr, &sktlen)) < 0) {		// recv message
 				report_error_and_exit(ERR_RECVFROM, "recvmsg");
 			}
-			printf("[SUCCSESS] DATA RECIEVED\n");
+			printf("[SUCCSESS] DATA RECIEVED ");
 			printf("FROM: %s", inet_ntoa(hpr->socaddptr->sin_addr));
 			printf(":%d LENGTH: %d \n", ntohs(hpr->socaddptr->sin_port), count);
 			return 0;
@@ -275,6 +333,10 @@ void send_offer(struct dhcphead *hpr)
 	fprintf(stderr, "[SUCCSESS]SENT: OFFER ");
 	fprintf(stderr, "SIZE: %d ", dsize);
 	fprintf(stderr, "For rent: %s\n", inet_ntoa(dpacket.ipaddr));
+
+	/* set timeout */
+	hpr->cliincmd->ttlcounter = CONNECTION_TIMEOUT;
+	fprintf(stderr, "Wait offer for %d\n", hpr->cliincmd->ttlcounter);
 	return;
 }
 
@@ -307,12 +369,19 @@ void send_ack(struct dhcphead *hpr)
 	fprintf(stderr, "[SUCCSESS]SENT: ACK ");
 	fprintf(stderr, "SIZE: %d ", dsize);
 	fprintf(stderr, "Allow using: %s\n", inet_ntoa(dpacket.ipaddr));
+
+	/* set timeout */
+	hpr->cliincmd->ttlcounter = (int)hpr->cliincmd->ttl;
 	return;
 }
 
 void client_exit(struct dhcphead *hpr)
 {
 	// TODO: implement
+	
+	set_iptab(hpr, hpr->iplisthpr, hpr->cliincmd->ippptr);
+	remove_cltab(hpr);
+	fprintf(stderr, "Client Exit\n");
 	return;
 }
 
@@ -340,6 +409,7 @@ int dhcp_packet_handler(struct dhcphead *hpr, int *code, int *errno)
 				*errno = INVALID_PACKET;
 				return DHCP_REQUEST;
 			} else {		// IF valid
+				hpr->cliincmd->ttl = hpr->recvpacket.ttl;
 				*errno = VALID_PACKET;
 				*code = hpr->recvpacket.code;
 				return DHCP_REQUEST;
