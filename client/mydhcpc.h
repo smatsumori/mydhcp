@@ -66,9 +66,19 @@ void init(struct dhcphead *hpr)
 	/* set server socket */
 	skt.sin_family = AF_INET;		// set address family
 	skt.sin_port = htons(DHCP_SERV_PORT);		// port num
+
+	#ifdef DEBUG
 	if (inet_aton(DHCP_SERV_IPADDR, &skt.sin_addr) == 0)
 		report_error_and_exit(ERR_ATON, "init");
-	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
+	#endif
+	#ifndef DEBUG
+	// ipaddr already set
+	// use dhcphead.ipaddr as serv ip for a while (shold be recv packet IP)
+	skt.sin_addr = hpr->ipaddr;
+	#endif
+
+	fprintf(stderr, "DHCP server's IP has set to: %s\n", 
+			inet_ntoa(skt.sin_addr));
 
 	hpr->socaddptr = &skt;
 	hpr->mysocd = socd;
@@ -260,6 +270,7 @@ int recvoffer(struct dhcphead *hpr)
 			} else {
 				// TODO: handle invald packet
 				fprintf(stderr, "Invalid Packet type: %d\n", recvpacket.op);
+				exit(1);
 			}
 
 		}
