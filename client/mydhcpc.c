@@ -30,9 +30,19 @@ static struct eventtable etab[] = {
 	{EV_RECVOFFER_C1, "EV_RECVOFFER_C1", "No IP address available this time."},
 	{EV_RECVACK_C0, "EV_RECVACK_C0", "IP addres has allocated."},
 	{EV_RECVACK_C4, "EV_RECVACK_C4", "Error with REQUEST."},
-	{EV_TIMER_TICK_HALF, "EV_TIMER_TICK_HALF", "Passed half of time to live"},
+	{EV_TIMER_TICK_HALF, "EV_TIMER_TICK_HALF", "Passed half of ttl(time to live)"},
 	{EV_SIGHUP, "EV_SIGHUP", "Signal recieved."},
 	{EV_EPSILON, "EV_EPSILON", ""},
+	{0, "", ""}
+};
+
+static struct eventtable stab[] = {
+	{ST_INIT, "ST_INIT", ""},
+	{ST_SEND_DISCOVER, "ST_SEND_DISCOVER", ""},
+	{ST_WAIT_OFFER, "ST_WAIT_OFFER", ""},
+	{ST_WAIT_ACK, "ST_WAIT_ACK", ""},
+	{ST_IN_USE, "ST_IN_USE", ""},
+	{ST_EXIT, "ST_EXIT", ""},
 	{0, "", ""}
 };
 
@@ -45,7 +55,7 @@ static struct proctable ptab[]= {
 	{ST_WAIT_OFFER, EV_RECVOFFER_C0, send_request, ST_WAIT_ACK},
 	{ST_WAIT_OFFER, EV_RECVOFFER_C1, resend_discover, ST_WAIT_OFFER},
 	{ST_WAIT_OFFER, EV_SIGHUP, send_release, ST_EXIT},
-	{ST_WAIT_ACK, EV_RECVACK_C0, show_ip, ST_IN_USE},
+	{ST_WAIT_ACK, EV_RECVACK_C0, start_use, ST_IN_USE},
 	{ST_WAIT_ACK, EV_RECVACK_C4, resend_request, ST_WAIT_ACK},
 	{ST_WAIT_ACK, EV_SIGHUP, send_release, ST_EXIT},
 	{ST_IN_USE, EV_TIMER_TICK_HALF, send_extend, ST_WAIT_ACK},
@@ -58,19 +68,6 @@ static struct dhcphead dhcph = {
 	.mysocd = -1
 };
 
-void print_event(int id)
-{
-	struct eventtable *evptr;
-	for (evptr = etab; evptr->id != 0; evptr++) {
-		if (evptr->id == id) {
-			fprintf(stderr, "##Event:%2d :: %2s :: %s##\n",
-				 	evptr->id, evptr->name, evptr->description);
-			return;
-		}
-	}
-	fprintf(stderr, "error: print_event\n");
-	return;
-}
 
 void sighup_func()
 {
@@ -88,19 +85,33 @@ void alrm_func()
 
 int main(int argc, char const* argv[])
 {
-	signal(SIGHUP, sighup_func);		// handle SIGHUP
+	char ipaddr[16] = DHCP_SERV_IPADDR;
+	#ifdef DEBUG
+		fprintf(stderr, "Running on DEBUG mode\n");
+	#endif
+	#ifndef DEBUG
+		if (argc != 2) {
+			fprintf(stderr, "Usage: ./mydhcpc.out <server IP>\n");
+			exit(1);
+		} else {
+			strcpy(ipaddr, argv[1]);
+		}
+	#endif
 	struct proctable *ptptr;
 	struct dhcphead *hpr = &dhcph;
+
+
+	signal(SIGHUP, sighup_func);		// handle SIGHUP
 	int event = EV_INIT;	/* Initialization */
 	status = ST_INIT;
-	fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
+	fprintf(stderr, "\n--------STATUS: %2d--------\n", status);
 	while (1) {
 		for (ptptr = ptab; ptptr -> status; ptptr++) {
 				if (ptptr -> status == status && ptptr -> event == event) {
 					(*ptptr -> func)(hpr);
 					status = ptptr->nextstatus;
-					fprintf(stderr, "moving to status: %2d\n", status);
-					fprintf(stderr, "\n--------STATUS: %2d--------\n\n", status);
+					fprintf(stderr, "moving to status: %2d\n\n", status);
+					print_status(status, stab);
 					break;
 				}
 		}
@@ -109,7 +120,7 @@ int main(int argc, char const* argv[])
 	
 		if ((event = wait_event(hpr)) < 0)
 			report_error_and_exit(ERROR_EVENT, "main");
-		print_event(event);
+		print_event(event, etab);
 	}
 
 	return 0;
@@ -118,6 +129,7 @@ int main(int argc, char const* argv[])
 int wait_event(struct dhcphead *hpr)
 {
 	static struct itimerval itval;
+	struct timeval dtime;
 	switch (status) {
 		case ST_INIT:
 			/* error if it passes here */
@@ -148,11 +160,14 @@ int wait_event(struct dhcphead *hpr)
 			}
 
 		case ST_IN_USE:
-			gettimeofday(&itval.it_value, NULL);		// get current time
-			itval.it_interval.tv_sec = itval.it_value.tv_sec + (long)hpr->servttl;	// set time to live
+			signal(SIGALRM, alrm_func);		// handle SIGHUP
+			gettimeofday(&dtime, NULL);		// get current time TODO: remove this
+			dtime.tv_sec += ((long)hpr->servttl);
+			itval.it_value.tv_sec = ((long)hpr->servttl) / 2;
+			itval.it_value.tv_usec = 0;
+			itval.it_interval.tv_sec, itval.it_interval.tv_usec = 0;
 			setitimer(ITIMER_REAL, &itval, NULL);
-			fprintf(stderr, "Timer starts from: %s\n", ctime((const time_t *)&itval.it_value));
-			fprintf(stderr, "Timer stops at: %s\n", ctime((const time_t *)&itval.it_interval));
+			fprintf(stderr, "Timer stops in: %ld secs\n", itval.it_value.tv_sec);
 			pause();
 			if (sighupflag > 0){
 				return EV_SIGHUP;

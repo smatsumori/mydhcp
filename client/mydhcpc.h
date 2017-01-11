@@ -4,18 +4,12 @@
 #include "../utils/packet.h"
 #include "../utils/utils.h"
 
-#include <assert.h>
-#include <sys/select.h>
-#include <unistd.h>
-#include <sys/time.h>
-#include <signal.h>
-
 
 /* dhcphead used for passing socket descriptor for the machine
  * and socket for dhcp server
  */
 struct dhcphead{
-	int mysocd; // socket descriptor
+	int mysocd;		/* socket descriptor for client */
 	struct sockaddr_in *socaddptr;		/* socket for server */
 
 	/* packet info */
@@ -25,12 +19,6 @@ struct dhcphead{
 };
 
 /*** FSM ***/
-struct eventtable {
-	int id;
-	char name[MAX_NAME];
-	char description[MAX_DESCRIPTION];
-};
-
 
 struct proctable {
 	int status;
@@ -47,19 +35,40 @@ void init(struct dhcphead *hpr)
 	fprintf(stderr, "Initialization\n");
 	
 	/* Begin initialization */
+	int suffix;
+	printf("Set client port: %d + ", DHCP_CLI_PORT);
+	scanf("%d", &suffix);
+
+	if(DHCP_CLI_PORT + suffix == DHCP_SERV_PORT) {
+		fprintf(stderr, "Cannot use DHCP_SERV_PORT: %d\n", DHCP_SERV_PORT);
+	}
+
+	/* bind client socket */
 	int socd;
 	static struct sockaddr_in skt;		// socket for server SHOULD BE STATIC
-	struct in_addr ipaddr;	// ipaddr for dhcp serv
-	socd = socket(PF_INET, SOCK_DGRAM, 0);		// get socket descriptor
-
+	if ((socd = socket(PF_INET, SOCK_DGRAM, 0)) < 0)
+		report_error_and_exit(ERR_SOCKET, "init");		// get socd
 	fprintf(stderr, "Socket descriptor: %d\n", socd);
-	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
+
+	struct sockaddr_in myskt;		// socket for client
+	bzero(&myskt, sizeof myskt);
+	myskt.sin_family = AF_INET;
+	myskt.sin_port = htons(DHCP_CLI_PORT + suffix);		// NEED TO SET PORT
+	myskt.sin_addr.s_addr = htonl(INADDR_ANY);		// any IP for client
+
+	if (bind(socd, (struct sockaddr *)&myskt, sizeof myskt) < 0)
+		report_error_and_exit(ERR_BIND, "init");
+
+	fprintf(stderr, "DHCP client's IP: %s", inet_ntoa(myskt.sin_addr));
+	fprintf(stderr, ":%d\n", ntohs(myskt.sin_port));
+
+
 	/* set server socket */
-	assert(inet_aton(DHCP_SERV_IPADDR, &ipaddr) == 1);	// set dhcp serv ip
-	ipaddr.s_addr = htonl(ipaddr.s_addr);		// converting to network byte order
 	skt.sin_family = AF_INET;		// set address family
 	skt.sin_port = htons(DHCP_SERV_PORT);		// port num
-	skt.sin_addr.s_addr = htonl(ipaddr.s_addr);		// set ipaddr
+	if (inet_aton(DHCP_SERV_IPADDR, &skt.sin_addr) == 0)
+		report_error_and_exit(ERR_ATON, "init");
+	fprintf(stderr, "DHCP server's IP has set to: %s\n", DHCP_SERV_IPADDR);
 
 	hpr->socaddptr = &skt;
 	hpr->mysocd = socd;
@@ -153,7 +162,7 @@ void send_extend(struct dhcphead *hpr)
 	return;
 }
 
-void show_ip(struct dhcphead *hpr)
+void start_use(struct dhcphead *hpr)
 {
 	fprintf(stderr, "Address in use\n");
 	fprintf(stderr, "IPADDR: %s\n", inet_ntoa(hpr->ipaddr));
@@ -187,6 +196,7 @@ void send_release(struct dhcphead *hpr)
 void exit_client(struct dhcphead *hpr)
 {
 	fprintf(stderr, "***** Exiting Client *****\n");
+	close(hpr->mysocd);
 	exit(0);
 	return;
 }
@@ -200,6 +210,8 @@ int recvoffer(struct dhcphead *hpr)
 	 *  1: recv offer (error)
 	 */
 	/* ports already set */
+	fprintf(stderr, "Recieving OFFER\n");
+
 	int rv, count;
 	socklen_t sktlen;		// size of server's socket length
 	struct dhcp_packet recvpacket;
@@ -209,37 +221,47 @@ int recvoffer(struct dhcphead *hpr)
 	// no need to bind socket (because we have no IP)
 	fd_set rdfds;		/* sets of file descriptor */
 	FD_ZERO(&rdfds);		/* set fds to 0 */
-	FD_SET(hpr->mysocd, &rdfds);		/* set file descriptor */
+	FD_SET(hpr->mysocd, &rdfds);		/* set file client descriptor */
+
 
 	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
 		report_error_and_exit(ERR_SELECT, "recvoffer");
 	} else if (rv == 0) {
-		fprintf(stderr, "Time out. No data after %d secs.\n", MSG_TIMEOUT);
+		fprintf(stderr, "[FAIL]Time out. No data after %d secs.\n", MSG_TIMEOUT);
 		return -1;
 	} else {		// data recieved
 		if (FD_ISSET(hpr->mysocd, &rdfds)) {
-			sktlen = sizeof *(hpr->socaddptr);
-			if ((count = recvfrom(hpr->mysocd, &recvpacket, sizeof recvpacket, 0,
-							(struct sockaddr *)hpr->socaddptr, &sktlen))) {
-				report_error_and_exit(ERR_RECVFROM, "recvoffer");
-				
-				if (recvpacket.op == DHCP_OFFER) {
-					switch (recvpacket.code) {
-						case CODE_OK:
-							hpr->servttl = recvpacket.ttl;
-							hpr->ipaddr = recvpacket.ipaddr;
-							hpr->netmask = recvpacket.netmask;
-							return 0;
-						case CODE_ERR:
-							return 1;
-						default:
-							report_error_and_exit(ERR_INVALID_CODE, "recvoffer");
-					}
-				} else {
-					report_error_and_exit(ERR_INVALID_OP, "recvoffer");
-				}
+			sktlen = sizeof *(hpr->socaddptr);	// set size
 
+			if ((count = recvfrom(hpr->mysocd, &recvpacket, sizeof recvpacket, 0,
+							(struct sockaddr *)hpr->socaddptr, &sktlen)) < 0) {
+				printf("[FAIL] DATA RECIEVED\n");
+				printf("FROM: %s", inet_ntoa(hpr->socaddptr->sin_addr));
+				printf(":%d LENGTH: %d \n", hpr->socaddptr->sin_port, count);
+				report_error_and_exit(ERR_RECVFROM, "recvoffer:");
 			}
+
+			printf("[SUCCSESS] OFFER RECIEVED\n");
+			printf("FROM: %s", inet_ntoa(hpr->socaddptr->sin_addr));
+			printf(":%d LENGTH: %d \n", hpr->socaddptr->sin_port, count);
+			
+			if (recvpacket.op == DHCP_OFFER) {
+				switch (recvpacket.code) {
+					case CODE_OK:
+						hpr->servttl = recvpacket.ttl;		// set ttl
+						hpr->ipaddr = recvpacket.ipaddr;		// set ipaddress (can allocate)
+						hpr->netmask = recvpacket.netmask;		// set netmask
+						return 0;
+					case CODE_ERR:
+						return 1;
+					default:
+						report_error_and_exit(ERR_INVALID_CODE, "recvoffer: invalidcode");
+				}
+			} else {
+				// TODO: handle invald packet
+				fprintf(stderr, "Invalid Packet type: %d\n", recvpacket.op);
+			}
+
 		}
 	}
 	return -2;
@@ -259,7 +281,6 @@ int recvack(struct dhcphead *hpr)
 		.tv_sec = MSG_TIMEOUT,
 	};
 
-	// no need to bind socket (because we have no IP)
 	fd_set rdfds;		/* sets of file descriptor */
 	FD_ZERO(&rdfds);		/* set fds to 0 */
 	FD_SET(hpr->mysocd, &rdfds);		/* set file descriptor */
@@ -271,28 +292,32 @@ int recvack(struct dhcphead *hpr)
 		return -1;
 	} else {		// data recieved
 		if (FD_ISSET(hpr->mysocd, &rdfds)) {
-			sktlen = sizeof *(hpr->socaddptr);
+			sktlen = sizeof *(hpr->socaddptr);		// sockaddptr (server)
 			if ((count = recvfrom(hpr->mysocd, &recvpacket, sizeof recvpacket, 0,
-							(struct sockaddr *)hpr->socaddptr, &sktlen))) {
-				report_error_and_exit(ERR_RECVFROM, "recvoffer");
-				
-				if (recvpacket.op == DHCP_OFFER) {
-					switch (recvpacket.code) {
-						case CODE_OK:
-							hpr->servttl = recvpacket.ttl;
-							hpr->ipaddr = recvpacket.ipaddr;
-							hpr->netmask = recvpacket.netmask;
-							return 0;
-						case CODE_ACKERR:
-							return 1;
-						default:
-							report_error_and_exit(ERR_INVALID_CODE, "recvack");
-					}
-				} else {
-					report_error_and_exit(ERR_INVALID_OP, "recvack");
-				}
-
+							(struct sockaddr *)hpr->socaddptr, &sktlen)) < 0) {
+				report_error_and_exit(ERR_RECVFROM, "recvack");
 			}
+
+			printf("[SUCCSESS] ACK RECIEVED\n");
+			printf("FROM: %s", inet_ntoa(hpr->socaddptr->sin_addr));
+			printf(":%d LENGTH: %d \n", hpr->socaddptr->sin_port, count);
+
+			if (recvpacket.op == DHCP_ACK) {
+				switch (recvpacket.code) {
+					case CODE_OK:
+						hpr->servttl = recvpacket.ttl;
+						hpr->ipaddr = recvpacket.ipaddr;
+						hpr->netmask = recvpacket.netmask;
+						return 0;
+					case CODE_ACKERR:
+						return 1;
+					default:
+						report_error_and_exit(ERR_INVALID_CODE, "recvack");
+				}
+			} else {
+				report_error_and_exit(ERR_INVALID_OP, "recvack");
+			}
+
 		}
 	}
 
