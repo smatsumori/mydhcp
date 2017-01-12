@@ -18,16 +18,11 @@
 #define EV_IMD_RELEASE 205
 
 #define ST_INIT 1
-#define ST_SEND_DISCOVER 2
-#define ST_WAIT_OFFER 3
-#define ST_WAIT_ACK 4
-#define ST_IN_USE 5
+#define ST_WAIT_DISCOVER 111
+#define ST_WAIT_REQUEST 112
+#define ST_WAIT_REQUEST_RE 12
+#define ST_IP_RENTED 113
 #define ST_EXIT 6
-
-#define ST_WAIT_DISCOVER 11
-#define ST_WAIT_REQUEST 12
-#define ST_IP_RENTED 13
-
 /*** PROTOTYPES ***/
 int wait_event(struct dhcphead *);
 int global_event_dispatcher(struct dhcphead *);
@@ -57,7 +52,7 @@ static struct ippool iplist_head = {
 
 static struct dhcphead dhcph = {
 	.client_id = 0, .clisthpr = &clist_head, .iplisthpr = &iplist_head,
-	.cliincmd = &clist_head,
+	.cliincmd = &clist_head, 
 	.ipsets = 0, .clients_online = 0, .clients = 0
 };
 
@@ -76,19 +71,21 @@ static struct eventtable etab[] = {
 static struct eventtable stab[] = {
 	{ST_WAIT_DISCOVER, "ST_WAIT_DISCOVER", ""},
 	{ST_WAIT_REQUEST, "ST_WAIT_REQUEST", ""},
+	{ST_WAIT_REQUEST_RE, "ST_WAIT_REQUEST_RE", ""},
 	{ST_IP_RENTED, "ST_IP_RENTED", ""},
 	{ST_EXIT, "ST_EXIT", ""},
 	{0, "", ""}
 };
 
-static struct proctable ptab[]= {		// TODO: handle invalid msg
+static struct proctable ptab[]= {		
 	{ST_WAIT_DISCOVER, EV_RECV_DISCOVER, send_offer, ST_WAIT_REQUEST},
 	{ST_WAIT_DISCOVER, EV_RECV_DISCOVER_NOIP, client_exit, ST_EXIT},
 	{ST_WAIT_DISCOVER, EV_TIMEOUT, client_exit, ST_EXIT},
 	{ST_WAIT_DISCOVER, EV_IMD_RELEASE, client_exit, ST_EXIT},
 	{ST_WAIT_REQUEST, EV_RECV_REQUEST_C2, send_ack, ST_IP_RENTED},
-	{ST_WAIT_REQUEST, EV_TIMEOUT, client_exit, ST_EXIT},
+	{ST_WAIT_REQUEST, EV_TIMEOUT, send_offer, ST_WAIT_REQUEST_RE},
 	{ST_WAIT_REQUEST, EV_IMD_RELEASE, client_exit, ST_EXIT},
+	{ST_WAIT_REQUEST_RE, EV_TIMEOUT, client_exit, ST_EXIT},		/* timeout 2 times */
 	{ST_IP_RENTED, EV_RECV_REQUEST_C3, send_ack, ST_IP_RENTED},
 	{ST_IP_RENTED, EV_RECV_RELEASE, client_exit, ST_EXIT},
 	{ST_IP_RENTED, EV_TIMEOUT, client_exit, ST_EXIT},
@@ -261,6 +258,7 @@ int wait_event(struct dhcphead *hpr)
 					return EV_RECV_DISCOVER;
 			}
 		
+		case ST_WAIT_REQUEST_RE:
 		case ST_WAIT_REQUEST:
 			switch (dhcp_packet_handler(hpr, &code, &errno)) {
 				case DHCP_REQUEST:

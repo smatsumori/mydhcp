@@ -227,7 +227,7 @@ struct ippool *get_iptab(struct ippool *iphpr)
 	sp->fp = sp;
 	sp->bp = sp;
 
-	fprintf(stderr, "IP for rent: %s\n", inet_ntoa(sp->addr));
+	fprintf(stderr, "IP for rent: %s.	IP left %d\n", inet_ntoa(sp->addr));
 
 	/*
 	fprintf(stderr, "\n***  REMAINING  ***\n");
