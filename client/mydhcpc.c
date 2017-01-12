@@ -148,6 +148,10 @@ int main(int argc, char const* argv[])
 
 int wait_event(struct dhcphead *hpr)
 {
+	if (sighupflag > 0) {
+		return EV_SIGHUP;
+	}
+
 	static struct itimerval itval;
 	switch (status) {
 		case ST_INIT:

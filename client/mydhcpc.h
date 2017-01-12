@@ -235,7 +235,7 @@ int recvoffer(struct dhcphead *hpr)
 
 
 	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
-		report_error_and_exit(ERR_SELECT, "recvoffer");
+		fprintf(stderr, "ERROR: SELECT\n");		// Do not exit for handling SIGHUP
 	} else if (rv == 0) {
 		fprintf(stderr, "[FAIL]Time out. No data after %d secs.\n", MSG_TIMEOUT);
 		return -1;
@@ -297,7 +297,7 @@ int recvack(struct dhcphead *hpr)
 	FD_SET(hpr->mysocd, &rdfds);		/* set file descriptor */
 
 	if ((rv = select(hpr->mysocd + 1, &rdfds, NULL, NULL, &timeout)) < 0) {
-		report_error_and_exit(ERR_SELECT, "recvoffer");
+		fprintf(stderr, "ERROR: SELECT\n");		// Do not exit for handling SIGHUP
 	} else if (rv == 0) {
 		fprintf(stderr, "Time out. No data after %d secs.\n", MSG_TIMEOUT);
 		return -1;
