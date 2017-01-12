@@ -377,10 +377,8 @@ void send_ack(struct dhcphead *hpr)
 
 void client_exit(struct dhcphead *hpr)
 {
-	// TODO: implement
-	
-	set_iptab(hpr, hpr->iplisthpr, hpr->cliincmd->ippptr);
-	remove_cltab(hpr);
+	set_iptab(hpr, hpr->iplisthpr, hpr->cliincmd->ippptr);		// collect ip 
+	remove_cltab(hpr);		// remove client from table
 	fprintf(stderr, "Client Exit\n");
 	return;
 }

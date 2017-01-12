@@ -2,7 +2,7 @@ CC = gcc
 TARGET = mydhcpc.out
 SRCS = mydhcpc.c
 OBJS = mydhcpc.o
-DEPS = mydhcpc.h packet.h
+DEPS = mydhcpc.h ../utils/packet.h
 
 LDFLAGS =
 CFLAGS = -g -O
@@ -13,7 +13,7 @@ RM = rm -f
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(DFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) $(DFLAGS) $^ -o $@
 
 .c.o:
 	$(CC) -c $(DFLAGS) $<

@@ -16,6 +16,8 @@
 #define ST_WAIT_ACK 4
 #define ST_IN_USE 5
 #define ST_EXIT 6
+#define ST_WAIT_OFFER_RE 12
+#define ST_WAIT_ACK_RE 14
 
 #define ERR_SIGACTION 119
 
@@ -63,6 +65,8 @@ static struct eventtable stab[] = {
 	{ST_WAIT_ACK, "ST_WAIT_ACK", ""},
 	{ST_IN_USE, "ST_IN_USE", ""},
 	{ST_EXIT, "ST_EXIT", ""},
+	{ST_WAIT_OFFER_RE, "ST_WAIT_OFFER_RE", ""},
+	{ST_WAIT_ACK_RE, "ST_WAIT_ACK_RE", ""},
 	{0, "", ""}
 };
 
@@ -71,13 +75,16 @@ static struct proctable ptab[]= {
 	{ST_INIT, EV_SIGHUP, send_release, ST_EXIT},
 	{ST_SEND_DISCOVER, EV_SEND_DISCOVER, send_discover, ST_WAIT_OFFER},
 	{ST_SEND_DISCOVER, EV_SIGHUP, send_release, ST_EXIT},
-	{ST_WAIT_OFFER, EV_TIMEOUT, send_discover, ST_WAIT_OFFER},		/* DISCOVER TIMEOUT */
+	{ST_WAIT_OFFER, EV_TIMEOUT, send_discover, ST_WAIT_OFFER_RE},		/* DISCOVER TIMEOUT */
+	{ST_WAIT_OFFER_RE, EV_TIMEOUT, exit_client, ST_EXIT},		/* timeout exit */
 	{ST_WAIT_OFFER, EV_RECVOFFER_C0, send_request, ST_WAIT_ACK},
 	{ST_WAIT_OFFER, EV_RECVOFFER_C1, resend_discover, ST_WAIT_OFFER},
 	{ST_WAIT_OFFER, EV_SIGHUP, send_release, ST_EXIT},
 	{ST_WAIT_ACK, EV_RECVACK_C0, start_use, ST_IN_USE},
 	{ST_WAIT_ACK, EV_RECVACK_C4, resend_request, ST_WAIT_ACK},
 	{ST_WAIT_ACK, EV_SIGHUP, send_release, ST_EXIT},
+	{ST_WAIT_ACK, EV_TIMEOUT, send_request, ST_WAIT_ACK_RE},
+	{ST_WAIT_ACK_RE, EV_TIMEOUT, send_release, ST_EXIT},
 	{ST_IN_USE, EV_TIMER_TICK_HALF, send_extend, ST_WAIT_ACK},
 	{ST_IN_USE, EV_SIGHUP, send_release, ST_EXIT},
 	{ST_EXIT, EV_EPSILON, exit_client, ST_EXIT},
@@ -93,6 +100,9 @@ static struct dhcphead dhcph = {
 int main(int argc, char const* argv[])
 {
 	char ipaddr[16] = DHCP_SERV_IPADDR;
+	struct proctable *ptptr;
+	struct dhcphead *hpr = &dhcph;
+
 	#ifdef DEBUG
 		fprintf(stderr, "Running on DEBUG mode\n");
 	#endif
@@ -102,10 +112,10 @@ int main(int argc, char const* argv[])
 			exit(1);
 		} else {
 			strcpy(ipaddr, argv[1]);
+			if (inet_aton(ipaddr, &hpr->ipaddr) == 0)
+				report_error_and_exit(ERR_ATON, "argv");
 		}
 	#endif
-	struct proctable *ptptr;
-	struct dhcphead *hpr = &dhcph;
 
 	sigemptyset(&sighup_act.sa_mask);
 
@@ -139,14 +149,14 @@ int main(int argc, char const* argv[])
 int wait_event(struct dhcphead *hpr)
 {
 	static struct itimerval itval;
-	struct timeval dtime;
 	switch (status) {
 		case ST_INIT:
 			/* error if it passes here */
 			break;
 		case ST_SEND_DISCOVER:
 			return EV_SEND_DISCOVER;		// DISCOVER has sent
-
+	
+		case ST_WAIT_OFFER_RE:
 		case ST_WAIT_OFFER:
 			assert(hpr->mysocd != -1);
 			switch (recvoffer(hpr)) {
@@ -159,6 +169,7 @@ int wait_event(struct dhcphead *hpr)
 					return EV_RECVOFFER_C1;
 			}
 
+		case ST_WAIT_ACK_RE:
 		case ST_WAIT_ACK:
 			switch (recvack(hpr)) {
 				case -1:		// timeout
@@ -171,8 +182,6 @@ int wait_event(struct dhcphead *hpr)
 
 		case ST_IN_USE:
 			signal(SIGALRM, alrm_func);		// handle SIGHUP
-			gettimeofday(&dtime, NULL);		// get current time TODO: remove this
-			dtime.tv_sec += ((long)hpr->servttl);
 			itval.it_value.tv_sec = ((long)hpr->servttl) / 2;
 			itval.it_value.tv_usec = 0;
 			itval.it_interval.tv_sec, itval.it_interval.tv_usec = 0;
