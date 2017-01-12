@@ -17,10 +17,30 @@
 #define ST_IN_USE 5
 #define ST_EXIT 6
 
+#define ERR_SIGACTION 119
+
 
 int wait_event(struct dhcphead *);
 static int status;
 static int alrmflag, sighupflag = 0;
+
+void sighup_func()
+{
+	fprintf(stderr, "SIGHUP recieved\n");
+	sighupflag++;
+	return;
+}
+
+void alrm_func()
+{	
+	/* called when it recieves SIGALRM */
+	alrmflag++;
+	return;
+}
+
+struct sigaction sighup_act = {
+	.sa_handler = sighup_func, .sa_flags = 0,
+};
 
 static struct eventtable etab[] = {
 	{EV_INIT, "EV_INIT", ""},
@@ -69,19 +89,6 @@ static struct dhcphead dhcph = {
 };
 
 
-void sighup_func()
-{
-	fprintf(stderr, "SIGHUP recieved\n");
-	sighupflag++;
-	return;
-}
-
-void alrm_func()
-{	
-	/* called when it recieves SIGALRM */
-	alrmflag++;
-	return;
-}
 
 int main(int argc, char const* argv[])
 {
@@ -100,8 +107,11 @@ int main(int argc, char const* argv[])
 	struct proctable *ptptr;
 	struct dhcphead *hpr = &dhcph;
 
+	sigemptyset(&sighup_act.sa_mask);
 
-	signal(SIGHUP, sighup_func);		// handle SIGHUP
+	if (sigaction(SIGHUP, &sighup_act, NULL) < 0)
+		report_error_and_exit(ERR_SIGACTION, "main");
+
 	int event = EV_INIT;	/* Initialization */
 	status = ST_INIT;
 	fprintf(stderr, "\n--------STATUS: %2d--------\n", status);
