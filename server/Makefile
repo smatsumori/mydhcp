@@ -6,7 +6,7 @@ DEPS = mydhcps.h ../utils/packet.h client.h
 
 LDFLAGS =
 CFLAGS = -g -O
-DFLAGS = -D DEBUG
+DFLAGS = #-D DEBUG
 
 RM = rm -f
 

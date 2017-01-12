@@ -6,7 +6,7 @@ DEPS = mydhcpc.h ../utils/packet.h
 
 LDFLAGS =
 CFLAGS = -g -O
-DFLAGS = -D DEBUG
+DFLAGS = #-D DEBUG
 
 RM = rm -f
 
