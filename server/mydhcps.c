@@ -157,7 +157,7 @@ int main(int argc, char const* argv[])
 		fprintf(stderr, "Usage: ./mydhcps.out config-file\n");
 		exit(1);
 	} else {
-		getconfig(argv[1], hpr);
+		get_config(argv[1], hpr);
 	}
 	#endif
 
@@ -173,7 +173,6 @@ int main(int argc, char const* argv[])
 	global_status = ST_INIT;
 
 	while(1) {
-		// TODO: show client status
 		global_event = global_event_dispatcher(hpr);		// get global event
 		if (global_event == GLOBAL_EV_TIMEOUT)
 			continue;
@@ -212,9 +211,6 @@ int main(int argc, char const* argv[])
 int global_event_dispatcher(struct dhcphead *hpr) 
 {
 	/* distinguishes who to throw an event */
-	// TODO: also need to handle msg timout for each client(how?)
-	// TODO: set client ttlcounter
-	// TODO: improve
 	signal(SIGALRM, GBAlrm);
 	static struct itimerval itval;
 	itval.it_value.tv_sec = 1;
@@ -243,7 +239,6 @@ int global_event_dispatcher(struct dhcphead *hpr)
 
 int wait_event(struct dhcphead *hpr)
 {
-	// TODO: handle signal
 	
 	if (global_event == GLOBAL_EV_CLI_TIMEOUT) 
 		return EV_TIMEOUT;

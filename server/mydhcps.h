@@ -61,15 +61,37 @@ void global_init(struct dhcphead *hpr)
 	bzero(&myskt, sizeof myskt);
 	myskt.sin_family = AF_INET;
 	myskt.sin_port = htons(DHCP_SERV_PORT);
+	myskt.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	#ifdef DEBUG
 	assert(inet_aton(DHCP_SERV_IPADDR, &myskt.sin_addr) == 1);
+	#endif
 
 	if (bind(hpr->mysocd, (struct sockaddr *)&myskt, sizeof myskt) < 0)
 		report_error_and_exit(ERR_BIND, "global_init");
 
 	fprintf(stderr, "bind cmpl...\n");
 
+	#ifdef DEBUG
 	fprintf(stderr, "DHCP server's IP: %s:%d\n", 
 			inet_ntoa(myskt.sin_addr), DHCP_SERV_PORT);
+	#endif
+
+	#ifndef DEBUG
+	/*
+	#define CONNECTION_BACKLOG 5
+	listen(hpr->mysocd, CONNECTION_BACKLOG);
+	struct sockaddr_in sa;
+	int sa_len = sizeof(sa);
+	if (getsockname(hpr->mysocd, (struct sockaddr *)&sa, &sa_len) == -1) {
+		report_error_and_exit(ERR_SOCKET, "global_init: getsocket");
+	}
+	fprintf(stderr, "DHCP server's IP: %s:%d\n", 
+			inet_ntoa(sa.sin_addr), DHCP_SERV_PORT);
+	*/
+	fprintf(stderr, "DHCP server's IP: %s:%d, Check ifconfig to get machine's IP addr.\n", 
+			inet_ntoa(myskt.sin_addr), DHCP_SERV_PORT);
+	#endif
 
 	fprintf(stderr, "Initialization complete!\n\n\n");
 
